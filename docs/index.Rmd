@@ -17,13 +17,15 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(janitor)
 library(gt) 
-library(here) 
+library(here)
 library(sf)
 ```
 
 
 
+
 ##### And now our data, we'll be looking from June-December (Summer to winter) across 2023, and 2024. These data files are large, so it may take some time for the chunk to run. (Only doing 2024 for now)
+
 
 ```{R, message=FALSE}
 data_jun_2024 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/95f7f250-bd04-4e4a-b853-5df75b00a632/download/pitc202406.csv") %>% 
@@ -53,8 +55,6 @@ pop_2024 = read_csv("https://www.opendata.nhs.scot/dataset/7f010430-6ce1-4813-b2
   select(hb, all_ages) 
 ```
 
-## Filtering our data
-
 ##### First we will collate our data into a list, so we can proccess it all with one command
 
 
@@ -69,7 +69,8 @@ data_list_2024 <- list(
   dec = data_dec_2024)
 ```
 
-#### We'll get rid of any collums which we won't need, so its easier to work with
+##### We'll get rid of any collums which we won't need, so its easier to work with
+
 
 ```{r}
 data_list_2024 = map(data_list_2024,
@@ -92,6 +93,8 @@ all_data_2024 = bind_rows(filtered_data_list_2024, .id = "month")
 ```
 
 
+
+
 ### Joining our data to healthboards, and plotting on a map.
 ##### Lets read out map data
 ```{r, message=FALSE}
@@ -99,8 +102,10 @@ all_data_2024 = bind_rows(filtered_data_list_2024, .id = "month")
 map = st_read("data/shapefile/NHS_Healthboards_2019.shp", quiet = TRUE)
 ```
 
+
 ##### Lets join our map and healthboard perscription data
-```{r}
+
+```{r, message=FALSE}
 Joined_data_2024 = map %>% 
   right_join(all_data_2024, 
              join_by("HBCode" == "hbt" ))
@@ -116,10 +121,24 @@ tally_data_2024 = Joined_data_2024 %>%
 Final_data_2024 = tally_data_2024 %>% 
   mutate(Perscription_per_capita = total_quanity/all_ages)
 
+```
+
+
+##### Now work out the perscription rate per capita
+```{r}
+Final_data_2024 = tally_data_2024 %>% 
+  mutate(Perscription_per_capita = total_quanity/all_ages)
+```
+
+
+##### Now make our data sets for each month that we want
+```{r}
 June_2024 = Final_data_2024 %>% filter( month == "jun")
 December_2024 = Final_data_2024 %>% filter( month == "dec")
 
 ```
+
+
 
 
 ## Plotting our map plots
@@ -153,8 +172,8 @@ ggplot(data = December_2024, aes(fill = Perscription_per_capita))+
 # Next steps:
 ##### 1) expand range of data, to include months inbetween, and 2023
 ##### 2) use facets/map to combine by year, possibly using .gif to display change too
-##### 3) plot perscriptions per capita over time, mainland vs islands (islands appear to perscribe less in december)
+##### 3) plot perscriptions per capita over time, maybe also plot temprature data or hospital stats for conditions like pneumonia
 ##### 4) optimise process, remove any redunancies/ ineffecent orderings
-##### 5) annotate further, to bring narrative
+##### 5) annotate further and build narrative
 
 

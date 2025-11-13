@@ -365,7 +365,7 @@ varation?</h3>
 <pre class="r"><code>library(tidyverse)
 library(janitor)
 library(gt) 
-library(here) 
+library(here)
 library(sf)</code></pre>
 </div>
 <div id="and-now-our-data-well-be-looking-from-june-december-summer-to-winter-across-2023-and-2024.-these-data-files-are-large-so-it-may-take-some-time-for-the-chunk-to-run.-only-doing-2024-for-now" class="section level5">
@@ -398,9 +398,6 @@ pop_2024 = read_csv(&quot;https://www.opendata.nhs.scot/dataset/7f010430-6ce1-48
            sex == &quot;All&quot;) %&gt;% 
   select(hb, all_ages) </code></pre>
 </div>
-</div>
-<div id="filtering-our-data" class="section level2">
-<h2>Filtering our data</h2>
 <div id="first-we-will-collate-our-data-into-a-list-so-we-can-proccess-it-all-with-one-command" class="section level5">
 <h5>First we will collate our data into a list, so we can proccess it
 all with one command</h5>
@@ -413,9 +410,9 @@ all with one command</h5>
   nov = data_nov_2024,
   dec = data_dec_2024)</code></pre>
 </div>
-<div id="well-get-rid-of-any-collums-which-we-wont-need-so-its-easier-to-work-with" class="section level4">
-<h4>We’ll get rid of any collums which we won’t need, so its easier to
-work with</h4>
+<div id="well-get-rid-of-any-collums-which-we-wont-need-so-its-easier-to-work-with" class="section level5">
+<h5>We’ll get rid of any collums which we won’t need, so its easier to
+work with</h5>
 <pre class="r"><code>data_list_2024 = map(data_list_2024,
                 ~ select(
                   .x, -c(gp_practice,
@@ -423,6 +420,7 @@ work with</h4>
                          prescribed_type,
                          gross_ingredient_cost,
                          paid_date_month )))</code></pre>
+</div>
 <div id="antibiotics-start-their-bnf-code-with-0510-so-we-will-filter-based-on-that" class="section level5">
 <h5>Antibiotics start their BNF code with “0510”, so we will filter
 based on that</h5>
@@ -450,15 +448,20 @@ tally_data_2024 = Joined_data_2024 %&gt;%
            month) %&gt;% 
   summarise(total_quanity = sum(paid_quantity, na.rm = TRUE)) %&gt;% 
   full_join(pop_2024, 
-            join_by(&quot;HBCode&quot; == &quot;hb&quot;))</code></pre>
-<pre><code>## `summarise()` has grouped output by &#39;HBName&#39;, &#39;HBCode&#39;. You can override using
-## the `.groups` argument.</code></pre>
-<pre class="r"><code>Final_data_2024 = tally_data_2024 %&gt;% 
-  mutate(Perscription_per_capita = total_quanity/all_ages)
+            join_by(&quot;HBCode&quot; == &quot;hb&quot;))
 
-June_2024 = Final_data_2024 %&gt;% filter( month == &quot;jun&quot;)
-December_2024 = Final_data_2024 %&gt;% filter( month == &quot;dec&quot;)</code></pre>
+Final_data_2024 = tally_data_2024 %&gt;% 
+  mutate(Perscription_per_capita = total_quanity/all_ages)</code></pre>
 </div>
+<div id="now-work-out-the-perscription-rate-per-capita" class="section level5">
+<h5>Now work out the perscription rate per capita</h5>
+<pre class="r"><code>Final_data_2024 = tally_data_2024 %&gt;% 
+  mutate(Perscription_per_capita = total_quanity/all_ages)</code></pre>
+</div>
+<div id="now-make-our-data-sets-for-each-month-that-we-want" class="section level5">
+<h5>Now make our data sets for each month that we want</h5>
+<pre class="r"><code>June_2024 = Final_data_2024 %&gt;% filter( month == &quot;jun&quot;)
+December_2024 = Final_data_2024 %&gt;% filter( month == &quot;dec&quot;)</code></pre>
 </div>
 </div>
 <div id="plotting-our-map-plots" class="section level2">
@@ -498,16 +501,16 @@ December_2024 = Final_data_2024 %&gt;% filter( month == &quot;dec&quot;)</code><
 <h5>2) use facets/map to combine by year, possibly using .gif to display
 change too</h5>
 </div>
-<div id="plot-perscriptions-per-capita-over-time-mainland-vs-islands-islands-appear-to-perscribe-less-in-december" class="section level5">
-<h5>3) plot perscriptions per capita over time, mainland vs islands
-(islands appear to perscribe less in december)</h5>
+<div id="plot-perscriptions-per-capita-over-time-maybe-also-plot-temprature-data-or-hospital-stats-for-conditions-like-pneumonia" class="section level5">
+<h5>3) plot perscriptions per capita over time, maybe also plot
+temprature data or hospital stats for conditions like pneumonia</h5>
 </div>
 <div id="optimise-process-remove-any-redunancies-ineffecent-orderings" class="section level5">
 <h5>4) optimise process, remove any redunancies/ ineffecent
 orderings</h5>
 </div>
-<div id="annotate-further-to-bring-narrative" class="section level5">
-<h5>5) annotate further, to bring narrative</h5>
+<div id="annotate-further-and-build-narrative" class="section level5">
+<h5>5) annotate further and build narrative</h5>
 </div>
 </div>
 
