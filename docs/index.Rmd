@@ -15,33 +15,18 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ##### First, lets load out packages in
 ```{R, message=FALSE}
-
 library(tidyverse)
 library(janitor)
-library(gt)
+library(gt) 
+library(here)
 library(sf)
 ```
 
+##### And now our data, we'll be looking from June-December (Summer to winter) across 2023, and 2024. These data files are large, so it may take some time for the chunk to run. (Only doing 2024 for now)
 
-
-##### Lets load our data, we'll be looking from June-December (Summer to winter) across 2023, and 2024. These data files are large, so it may take some time for the chunk to run. (Only doing 2024 for now)
 
 ```{R, message=FALSE}
 data_jun_2024 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/95f7f250-bd04-4e4a-b853-5df75b00a632/download/pitc202406.csv") %>% 
-  clean_names()
-
-data_jul_2024 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/1cb425fc-640c-4b37-9013-f8e97f274085/download/pitc202407.csv") %>% 
-  clean_names()
-
-data_aug_2024 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/e4985a62-9d59-4e71-8800-3f7ca29ffe0c/download/pitc202408.csv") %>% 
-  clean_names()
-
-data_sep_2024 <- read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/12448904-f11c-4a0f-8dab-8b47c5abebf8/downlohttps://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/d1fbede3-98c4-436e-9e75-2ed807a36075/download/pitc202409.csv") %>% 
-  clean_names()
-
-data_oct_2024 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/0d27f6e8-5f8b-42c4-9fe9-c44389af2d3e/download/pitc202410.csv") %>% 
-  clean_names()
-data_nov_2024 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/1b97dffc-310e-4a30-bf9c-22fddff3f499/download/pitc202411.csv") %>% 
   clean_names()
 
 data_dec_2024 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/e4380152-3d16-446b-9072-108e93cf5caa/download/pitc202412.csv") %>% 
@@ -52,29 +37,18 @@ pop_2024 = read_csv("https://www.opendata.nhs.scot/dataset/7f010430-6ce1-4813-b2
   filter(year == 2024 &
            sex == "All") %>% 
   select(hb, all_ages) 
+
+### I'm plotting two graphs, to prove there is a trend to investigate
 ```
 
-
-
-
-## Filtering our data
-
-##### First we will collate our data into a list, so we can proccess it all with one command
-
-
+##### First we will collate our data into a list, so we can proccess it all with one command (future proofing)
 ```{r}
 data_list_2024 <- list(
   jun = data_jun_2024,
-  jul = data_jul_2024,
-  aug = data_aug_2024,
-  sep = data_sep_2024,
-  oct = data_oct_2024,
-  nov = data_nov_2024,
   dec = data_dec_2024)
 ```
 
 ##### We'll get rid of any collums which we won't need, so its easier to work with
-
 ```{r}
 data_list_2024 = map(data_list_2024,
                 ~ select(
@@ -86,7 +60,6 @@ data_list_2024 = map(data_list_2024,
 ```
 
 ##### Antibiotics start their BNF code with "0510", so we will filter based on that
-
 ```{r}
 filtered_data_list_2024 =  map(data_list_2024, ~
   filter(.x, startsWith(bnf_item_code, "05010")))
@@ -96,16 +69,13 @@ all_data_2024 = bind_rows(filtered_data_list_2024, .id = "month")
 ```
 
 
-
-
 ### Joining our data to healthboards, and plotting on a map.
 ##### Lets read out map data
 ```{r, message=FALSE}
-
 map = st_read("data/shapefile/NHS_Healthboards_2019.shp", quiet = TRUE)
 ```
 
-##### Join our map and healthboard perscription data
+##### Lets join our map and healthboard perscription data
 ```{r, message=FALSE}
 Joined_data_2024 = map %>% 
   right_join(all_data_2024, 
@@ -118,13 +88,14 @@ tally_data_2024 = Joined_data_2024 %>%
   summarise(total_quanity = sum(paid_quantity, na.rm = TRUE)) %>% 
   full_join(pop_2024, 
             join_by("HBCode" == "hb"))
+
 ```
 
 
 ##### Now work out the perscription rate per capita
 ```{r}
 Final_data_2024 = tally_data_2024 %>% 
-  mutate(Perscription_per_capita = total_quanity/all_ages)
+  mutate(Dose_per_capita = total_quanity/all_ages)
 ```
 
 
@@ -136,11 +107,9 @@ December_2024 = Final_data_2024 %>% filter( month == "dec")
 ```
 
 
-
-
 ## Plotting our map plots
 ```{r}
-ggplot(data = June_2024, aes(fill = Perscription_per_capita))+
+ggplot(data = June_2024, aes(fill = Dose_per_capita))+
   geom_sf()+
   scale_fill_continuous(
     low = "white",
@@ -148,11 +117,11 @@ ggplot(data = June_2024, aes(fill = Perscription_per_capita))+
     limits = c(1.2, 3),
     labels = scales::label_comma())+
   labs(
-    title = "Antibiotic Prescriptions per Capita, June 2024",
+    title = "Antibiotic Doses per Capita, June 2024",
     fill = "Prescriptions per capita") +
   theme_minimal()
 
-ggplot(data = December_2024, aes(fill = Perscription_per_capita))+
+ggplot(data = December_2024, aes(fill = Dose_per_capita))+
   geom_sf()+
   scale_fill_continuous(
     low = "white",
@@ -160,18 +129,14 @@ ggplot(data = December_2024, aes(fill = Perscription_per_capita))+
     limits = c(1.2, 3),
     labels = scales::label_comma())+
   labs(
-    title = "Antibiotic Prescriptions per Capita, December 2024",
+    title = "Antibiotic Doses per Capita, December 2024",
     fill = "Prescriptions per capita") +
   theme_minimal()
 ```
 
-
-
 # Next steps:
 ##### 1) expand range of data, to include months inbetween, and 2023
 ##### 2) use facets/map to combine by year, possibly using .gif to display change too
-##### 3) plot perscriptions per capita over time, mainland vs islands (islands appear to perscribe less in december)
-##### 4) optimise process, remove any redunancies/ ineffecent orderings
-##### 5) annotate further, to bring narrative
-
-
+##### 3) plot dose per capita over time, maybe also plot temperature data or hospital stats for conditions like pneumonia
+##### 4) optimise process, remove any redunancies/ ineffecent orderings (data loading will be a large chuck if not optimised)
+##### 5) annotate further and build narrative
