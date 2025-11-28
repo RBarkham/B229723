@@ -47,6 +47,3 @@ rsconnect/
 
 #DS Store
 .DS_Store
-
-# data folder
-data/
