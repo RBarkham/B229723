@@ -37,7 +37,6 @@ library(shinytest2)
 
 ```{r}
 Temp_raw_2024 = rast("temp_2024.nc")
-
 ```
 
 
