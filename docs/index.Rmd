@@ -19,43 +19,60 @@ options(timeout = 600)
 ```{R, message=FALSE}
 library(tidyverse)
 library(janitor)
-library(gt) 
-library(here)
+library(gt)
 library(sf)
-library(raster)
 library(terra)
-library(ncdf4)
-library(tidync)
 library(exactextractr)
 library(shiny)
-library(shinytest2)
+library(glue)
 ```
+
 
 ##### And now our data, we'll be looking from June-December (Summer to winter) across 2023, and 2024. These data files are large, so it may take some time for the chunk to run. (Only doing 2024 for now)
 
 
-
 ```{r}
-Temp_raw_2024 = rast("temp_2024.nc")
-```
+url_2023 = "https://github.com/RBarkham/B229723/raw/refs/heads/main/docs/data/temp_2023.nc"
+url_2024 = "https://github.com/RBarkham/B229723/raw/refs/heads/main/docs/data/temp_2024.nc"
 
+# Create a temporary file
+tmp_file_2023 = tempfile(fileext = ".nc")
+tmp_file_2024 = tempfile(fileext = ".nc")
+
+# Download the file
+download.file(url_2023, tmp_file_2023, mode = "wb")
+temp_raw_2023 = rast(tmp_file_2023)
+download.file(url_2024, tmp_file_2024,mode = "wb")
+temp_raw_2024 = rast(tmp_file_2024)
+# Delete the temporary file
+
+
+# Now you can work with 'r' safely
+
+```
 
 ```{r, message=FALSE}
-map = st_read("data/shapefile/NHS_Healthboards_2019.shp", quiet = TRUE) %>% 
-  st_transform( crs(Temp_raw_2024))
+scotland_map = st_read("/vsizip/vsicurl/https://maps.gov.scot/ATOM/shapefiles/SG_NHS_HealthBoards_2019.zip/SG_NHS_HealthBoards_2019.shp", quiet = TRUE) %>% 
+  st_transform( crs(temp_raw_2024))
+
+#because our temp data is the same, formating our data to one year will work on all years 
+
+### https://cu-esiil.github.io/forest-carbon-codefest/collaborating-on-the-cloud/cyverse_data_management/ 
 ```
 
+
+
 ```{r}
-Temp_2024 = exact_extract(Temp_raw_2024, map, 'mean', append_cols = "HBName") 
+temp_2024 = exact_extract(temp_raw_2024, scotland_map, 'mean', append_cols = "HBName") 
 
-Temp_2024 = Temp_2024 %>% 
+temp_2024 = temp_2024 %>% 
     dplyr::select(c(1,7:13)) # a lot of packages in tidyverse use select() as a command, if we don't specify what package's select we want to use, it will get confused, so we add dplyr:: in front of select()
-  colnames(Temp_2024)[-1] = c("Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+  colnames(temp_2024)[-1] = c("Jun","Jul","Aug","Sep","Oct","Nov","Dec")
 
-Temp_map_2024 = Temp_2024 %>% 
+temp_map_2024 = temp_2024 %>% 
   #lets pipe our temp data into our joining function, we ideally want to keep the less important infomation (shape and geometry) our of the way, by specifying map as the second dataset, it will add it to the right-hand side.
   
-  full_join(map) %>%  
+  full_join(scotland_map) %>%  
   #here, we tell it to join with map. If we use full_join, it makes sure there are no empty rows.
   
   st_as_sf(sf_column_name = "geometry") # when we joined, the data lost its sf properties which make it suitbale for map plotting, we can restore it with st_as_sf()
@@ -64,7 +81,7 @@ Temp_map_2024 = Temp_2024 %>%
 ```
 
 ```{r}
-ggplot(Temp_map_2024) +
+ggplot(temp_map_2024) +
   geom_sf(aes(fill = Jun)) +
   scale_fill_viridis_c() +
   theme_minimal() +
@@ -78,223 +95,152 @@ ggplot(Temp_map_2024) +
 ```{R, message=FALSE}
 
 
-data_jun_2023 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/66e9611a-fbea-45b2-9edd-351c388fd06d/download/pitc202306.csv") %>% 
-  clean_names()
+library(tidyverse)
+library(janitor)
+Antibiotics_data = c(
+  jun_2023 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/66e9611a-fbea-45b2-9edd-351c388fd06d/download/pitc202306.csv",
+  jul_2023 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/7bb45ee6-6f1c-45f4-933b-958bdbe0ca4f/download/pitc202307.csv",
+  aug_2023 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/72ca4ad2-0228-4672-9eb0-cc911e4a8ca7/download/pitc202308.csv",
+  sep_2023 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/2d3d240f-1467-4a91-9f0e-769745650cb9/download/pitc202309.csv",
+  oct_2023 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/94134438-db1d-4b8d-8f70-5e9b0e47bd03/download/pitc202310.csv",
+  nov_2023 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/21d11fed-a494-4e30-9bb6-46143c3b9530/download/pitc202311.csv",
+  dec_2023 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/00cdf8d7-f784-4e87-894c-34f2540ea6ab/download/pitc202312.csv",
+  jun_2024 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/95f7f250-bd04-4e4a-b853-5df75b00a632/download/pitc202406.csv",
+  jul_2024 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/1cb425fc-640c-4b37-9013-f8e97f274085/download/pitc202407.csv",
+  aug_2024 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/e4985a62-9d59-4e71-8800-3f7ca29ffe0c/download/pitc202408.csv",
+  sep_2024 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/d1fbede3-98c4-436e-9e75-2ed807a36075/download/pitc202409.csv",
+  oct_2024 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/0d27f6e8-5f8b-42c4-9fe9-c44389af2d3e/download/pitc202410.csv",
+  nov_2024 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/1b97dffc-310e-4a30-bf9c-22fddff3f499/download/pitc202411.csv",
+  dec_2024 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/e4380152-3d16-446b-9072-108e93cf5caa/download/pitc202412.csv")
+data_list = map(Antibiotics_data, ~ read_csv(.x) %>% 
+                  clean_names()) ## you'll notice we had an error when we were loading "Parsing issue", lets check that out
 
-data_jul_2023 = read.csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/7bb45ee6-6f1c-45f4-933b-958bdbe0ca4f/download/pitc202307.csv") %>% 
-  clean_names()
+map(data_list, ~problems(.x)) ### we can see that there is missing data for Sucralfate (Nu), on Row Number 150,115 in Nov_2023
 
-data_aug_2023 = read.csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/72ca4ad2-0228-4672-9eb0-cc911e4a8ca7/download/pitc202308.csv") %>% 
-  clean_names()
+error = data_list$nov_2023 %>% 
+  slice(150114) # we want to isolate the problematic row, so we will use slice() to isolate by row number. We have to take 1 off our number, to account for the fact the slice() doesn't count the header, like base r does in problems(} 
 
-data_sep_2023 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/2d3d240f-1467-4a91-9f0e-769745650cb9/download/pitc202309.csv") %>% 
-  clean_names()
+# we can see that there no paid_quantity, gross_ingredient_cost nor paid_date_month, so was missing 3 columns (as reported). However, this isn't for an antibiotic, so it's not relevant for our purposes and we can ignore it safely.
 
-data_oct_2023 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/94134438-db1d-4b8d-8f70-5e9b0e47bd03/download/pitc202310.csv") %>% 
-  clean_names()
 
-data_nov_2023 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/21d11fed-a494-4e30-9bb6-46143c3b9530/download/pitc202311.csv") %>% 
-  clean_names()
-
-data_dec_2023 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/00cdf8d7-f784-4e87-894c-34f2540ea6ab/download/pitc202312.csv") %>% 
-  clean_names()
-
-data_jun_2024 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/95f7f250-bd04-4e4a-b853-5df75b00a632/download/pitc202406.csv") %>% 
-  clean_names()
-
-data_jul_2024 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/1cb425fc-640c-4b37-9013-f8e97f274085/download/pitc202407.csv") %>% 
-  clean_names()
-
-data_aug_2024 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/e4985a62-9d59-4e71-8800-3f7ca29ffe0c/download/pitc202408.csv") %>% 
-  clean_names()
-
-data_sep_2024 <- read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/d1fbede3-98c4-436e-9e75-2ed807a36075/download/pitc202409.csv") %>% 
-  clean_names()
-
-data_oct_2024 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/0d27f6e8-5f8b-42c4-9fe9-c44389af2d3e/download/pitc202410.csv") %>% 
-  clean_names()
-
-data_nov_2024 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/1b97dffc-310e-4a30-bf9c-22fddff3f499/download/pitc202411.csv") %>% 
-  clean_names()
-
-data_dec_2024 = read_csv("https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/e4380152-3d16-446b-9072-108e93cf5caa/download/pitc202412.csv") %>% 
-  clean_names()
-
-pop_2024 = read_csv("https://www.opendata.nhs.scot/dataset/7f010430-6ce1-4813-b25c-f7f335bdc4dc/resource/27a72cc8-d6d8-430c-8b4f-3109a9ceadb1/download/hb2019_pop_est_03102025.csv") %>% 
+pop = read_csv("https://www.opendata.nhs.scot/dataset/7f010430-6ce1-4813-b25c-f7f335bdc4dc/resource/27a72cc8-d6d8-430c-8b4f-3109a9ceadb1/download/hb2019_pop_est_03102025.csv") %>% 
   clean_names()%>%
-  filter(year == 2024 &
-           sex == "All") %>% 
-  dplyr::select(hb, all_ages) 
+  filter(year %in% c(2023, 2024) &
+           sex == "All" &
+           hb != "S92000003") %>% 
+  dplyr::select(hb, all_ages, year) 
 
 ### I'm plotting two graphs, to prove there is a trend to investigate
 ```
 
 ##### First we will collate our data into a list, so we can proccess it all with one command (future proofing)
-```{r}
-data_list_2024 = list(
-  jun = data_jun_2024,
-  jul = data_jul_2024,
-  aug = data_aug_2024,
-  sep = data_sep_2024,
-  oct = data_oct_2024,
-  nov = data_nov_2024,
-  dec = data_dec_2024)
 
-data_list_2023 = list(
-  jun = data_jun_2023,
-  jul = data_jul_2023,
-  aug = data_aug_2023,
-  sep = data_sep_2023,
-  oct = data_oct_2023,
-  nov = data_nov_2023,
-  dec = data_dec_2023
-)
-```
 
 ##### We'll get rid of any collums which we won't need, so its easier to work with
-```{r}
-data_list_2024 = map(data_list_2024,
-                ~ dplyr::select(
-                  .x, -c(gp_practice,
-                         dmd_code,
-                         prescribed_type,
-                         gross_ingredient_cost,
-                         paid_date_month )))
 
-data_list_2023 = map(data_list_2023,
-                ~ dplyr::select(
-                  .x, -c(gp_practice,
-                         dmd_code,
-                         prescribed_type,
-                         gross_ingredient_cost,
-                         paid_date_month )))
-```
 
 ##### Antibiotics start their BNF code with "0510", so we will filter based on that
-```{r}
-filtered_data_list_2024 =  map(data_list_2024, ~
-  filter(.x, startsWith(bnf_item_code, "05010")))
-  
-all_data_2024 = bind_rows(filtered_data_list_2024, .id = "month")
-
-filtered_data_list_2023 =  map(data_list_2023, ~
-  filter(.x, startsWith(bnf_item_code, "05010")))
-  
-all_data_2023 = bind_rows(filtered_data_list_2023, .id = "month")
-
-```
 
 
 ### Joining our data to healthboards, and plotting on a map.
 ##### Lets read out map data
 
-
 ##### Lets join our map and healthboard perscription data
-```{r, message=FALSE}
-Joined_data_2024 = map %>% 
-  right_join(all_data_2024, 
-             join_by("HBCode" == "hbt" ))
+```{r}
+data_list = data_list %>%
+  map(~ dplyr::select(
+                    .x, -c(gp_practice,
+                    dmd_code,
+                    prescribed_type,
+                    gross_ingredient_cost,
+                    paid_date_month )))
 
-tally_data_2024 = Joined_data_2024 %>% 
-  group_by(HBName, 
-           HBCode, 
-           month) %>% 
-  summarise(total_quanity = sum(paid_quantity, na.rm = TRUE)) %>% 
-  full_join(pop_2024, 
-            join_by("HBCode" == "hb"))
+data_list = map(data_list,
+    ~filter(.x, startsWith(bnf_item_code, "05010")))
+  
+all_data = data_list %>% 
+  bind_rows(.id = "month_year") %>% 
+  separate( month_year, into = c("Month", "Year"), sep = "_") %>% 
+  mutate(Year = as.numeric(Year))
+```
 
 
-Joined_data_2023 = map %>% 
-  right_join(all_data_2023, 
-             join_by("HBCode" == "hbt" ))
+```{r}
+tally_data = all_data %>% 
+  group_by(hbt,
+           Month,
+           Year) %>% 
+  summarise(total_quanity = sum(paid_quantity, na.rm = TRUE), .groups = "keep")
 
-tally_data_2023 = Joined_data_2023 %>% 
-  group_by(HBName, 
-           HBCode, 
-           month) %>% 
-  summarise(total_quanity = sum(paid_quantity, na.rm = TRUE)) %>% 
-  full_join(pop_2024, 
-            join_by("HBCode" == "hb"))
+joined_data = tally_data %>% 
+  right_join(pop, join_by(hbt == hb, Year == year))
+
+
+calculated_data = joined_data %>% 
+  mutate(Dose_per_capita = total_quanity/all_ages)
+
+Final_data = scotland_map %>% 
+  right_join(calculated_data, join_by(HBCode == hbt))%>% 
+  relocate(c("Shape_Leng", "Shape_Area"), .before = geometry) %>% 
+  st_as_sf()## this keep the data we want to look at together, so its easy to read
 
 ```
 
 
 ##### Now work out the perscription rate per capita
-```{r}
-Final_data_2024 = tally_data_2024 %>% 
-  mutate(Dose_per_capita = total_quanity/all_ages)
 
-Final_data_2023 = tally_data_2023 %>% 
-  mutate(Dose_per_capita = total_quanity/all_ages)
-```
 
 
 ##### Now make our data sets for each month that we want
 
-
-```{r}
-# Combine years for convenience
-all_data <- bind_rows(
-  Final_data_2023 %>% mutate(year = 2023),
-  Final_data_2024 %>% mutate(year = 2024)
-)
-```
-
-
-```{r}
-Final_data_2023 <- Final_data_2023 %>% mutate(year = 2023)
-Final_data_2024 <- Final_data_2024 %>% mutate(year = 2024)
-
-all_data <- bind_rows(Final_data_2023, Final_data_2024)
-
-# Ensure it's an sf object
-all_data <- st_as_sf(all_data)
-```
-
-
 ```{r}
 # ------------------------------------------------------------
-# UI
+# UI - Fix month choices to match your data
 # ------------------------------------------------------------
-
-ui <- fluidPage(
+ui = fluidPage(
   titlePanel("Antibiotic Doses per Capita by Health Board"),
   sidebarLayout(
     sidebarPanel(
-        selectInput("year", "Select Year", choices = c(2023, 2024)),
-        selectInput("month", "Select Month", choices = c("jun","jul","aug","sep","oct","nov","dec"))
-        ),
+      selectInput("Year", "Select Year", choices = c("2023", "2024")),
+      selectInput("Month", "Select Month", 
+                  choices = c("jun", "jul", "aug", "sep", "oct", "nov", "dec"))
+    ),
     mainPanel(
       plotOutput("antibiotic_map", height = "600px")
-    )))
-
-# ------------------------------------------------------------
-# SERVER
-# ------------------------------------------------------------
+    )
+  )
+)
 
 server = function(input, output, session) {
-      filtered_data = reactive({
-      all_data %>%
-      filter(year == input$year, month == input$month)})
-  
-  output$antibiotic_map <- renderPlot({
+
+  filtered_data = reactive({
+    df = Final_data %>%
+      filter(Year == as.numeric(input$Year),
+             Month == input$Month)
+    print(df)  # <-- check what rows are returned
+    df
+  })  # only ONE closing here
+
+  output$antibiotic_map = renderPlot({
     ggplot(filtered_data(), aes(fill = Dose_per_capita)) +
-      geom_sf() +
-      scale_fill_continuous(low = "white", high = "darkblue") +
+      geom_sf(color = "white", size = 0.5)+
+  scale_fill_continuous(
+    low = "white",
+    high = "darkblue",   
+    limits = c(1.2, 3),
+    labels = scales::label_comma())+
       labs(
         title = paste("Antibiotic Doses per Capita —",
-          toupper(input$month), input$year),
-        fill = "Doses per capita"
+                      toupper(input$Month), input$Year),
+        subtitle = "Scottish Health Boards"
       ) +
-      theme_minimal()
+      theme_minimal() +
+      theme(legend.position = "bottom")
   })
 }
 
-# ------------------------------------------------------------
-# RUN APP
-# ------------------------------------------------------------
-
 shinyApp(ui, server)
+
 ```
 
 
@@ -303,9 +249,9 @@ shinyApp(ui, server)
 
 
 ## Plotting our map plots
-```{r}
+```{r eval=FALSE, include=FALSE}
 ggplot(data = June_2024, aes(fill = Dose_per_capita))+
-  geom_sf()+
+  geom_sf(color = "white", size = 0.5)+
   scale_fill_continuous(
     low = "white",
     high = "darkblue",   
