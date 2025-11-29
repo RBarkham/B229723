@@ -194,22 +194,17 @@ Final_data = scotland_map %>%
 ##### Now make our data sets for each month that we want
 
 ```{r}
-# ------------------------------------------------------------
-# UI - Fix month choices to match your data
-# ------------------------------------------------------------
+
 ui = fluidPage(
   titlePanel("Antibiotic Doses per Capita by Health Board"),
   sidebarLayout(
     sidebarPanel(
       selectInput("Year", "Select Year", choices = c("2023", "2024")),
       selectInput("Month", "Select Month", 
-                  choices = c("jun", "jul", "aug", "sep", "oct", "nov", "dec"))
-    ),
+                  choices = c("jun", "jul", "aug", "sep", "oct", "nov", "dec"))),
     mainPanel(
       plotOutput("antibiotic_map", height = "600px")
-    )
-  )
-)
+    )))
 
 server = function(input, output, session) {
 
@@ -217,14 +212,12 @@ server = function(input, output, session) {
     df = Final_data %>%
       filter(Year == as.numeric(input$Year),
              Month == input$Month)
-    print(df)  # <-- check what rows are returned
-    df
-  })  # only ONE closing here
+  })
 
-  output$antibiotic_map = renderPlot({
+output$antibiotic_map = renderPlot({
     ggplot(filtered_data(), aes(fill = Dose_per_capita)) +
       geom_sf(color = "white", size = 0.5)+
-  scale_fill_continuous(
+scale_fill_continuous(
     low = "white",
     high = "darkblue",   
     limits = c(1.2, 3),
