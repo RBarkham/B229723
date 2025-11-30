@@ -1,14 +1,18 @@
 ---
 title: "Assesment"
-output: html_document
+output:
+  html_document:
+    df_print: paged
 date: "2025-10-31"
-runtime: shiny
+editor_options:
+  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 options(timeout = 600)
 ```
+
 
 # R Programing Assignment - B229723
 ### Is there an assocation between antibiotic perscription rate and the seasons? How does this vary by healthboard?
@@ -25,6 +29,8 @@ library(terra)
 library(exactextractr)
 library(shiny)
 library(glue)
+library(rsconnect)
+library(here)
 ```
 
 
@@ -53,6 +59,7 @@ temp_raw_2024 = rast(tmp_file_2024)
 
 ```{r, message=FALSE}
 scotland_map = st_read("/vsizip/vsicurl/https://maps.gov.scot/ATOM/shapefiles/SG_NHS_HealthBoards_2019.zip/SG_NHS_HealthBoards_2019.shp", quiet = TRUE) %>% 
+  st_simplify( dTolerance = 1000) %>% 
   st_transform( crs(temp_raw_2024))
 
 #because our temp data is the same, formating our data to one year will work on all years 
@@ -70,7 +77,7 @@ temp_2024 = temp_2024 %>%
   colnames(temp_2024)[-1] = c("Jun","Jul","Aug","Sep","Oct","Nov","Dec")
 
 temp_map_2024 = temp_2024 %>% 
-  #lets pipe our temp data into our joining function, we ideally want to keep the less important infomation (shape and geometry) our of the way, by specifying map as the second dataset, it will add it to the right-hand side.
+  #lets pipe our temp data into our joining function, we ideally want to keep the less important information (shape and geometry) our of the way, by specifying map as the second data set, it will add it to the right-hand side.
   
   full_join(scotland_map) %>%  
   #here, we tell it to join with map. If we use full_join, it makes sure there are no empty rows.
@@ -93,10 +100,6 @@ ggplot(temp_map_2024) +
 
 
 ```{R, message=FALSE}
-
-
-library(tidyverse)
-library(janitor)
 Antibiotics_data = c(
   jun_2023 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/66e9611a-fbea-45b2-9edd-351c388fd06d/download/pitc202306.csv",
   jul_2023 = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/7bb45ee6-6f1c-45f4-933b-958bdbe0ca4f/download/pitc202307.csv",
@@ -115,12 +118,12 @@ Antibiotics_data = c(
 data_list = map(Antibiotics_data, ~ read_csv(.x) %>% 
                   clean_names()) ## you'll notice we had an error when we were loading "Parsing issue", lets check that out
 
-map(data_list, ~problems(.x)) ### we can see that there is missing data for Sucralfate (Nu), on Row Number 150,115 in Nov_2023
+map(data_list, ~problems(.x)) ### we can see that there is missing data for Sucralfate (Nu), on Row Number 150,115 in Nov_2023 (our 6th tibble, and our 6th month)
 
 error = data_list$nov_2023 %>% 
   slice(150114) # we want to isolate the problematic row, so we will use slice() to isolate by row number. We have to take 1 off our number, to account for the fact the slice() doesn't count the header, like base r does in problems(} 
 
-# we can see that there no paid_quantity, gross_ingredient_cost nor paid_date_month, so was missing 3 columns (as reported). However, this isn't for an antibiotic, so it's not relevant for our purposes and we can ignore it safely.
+# we can see that there no paid_quantity, gross_ingredient_cost nor paid_date_month, so was missing 3 columns. However, this isn't for an antibiotic, so it's not relevant for our purposes and we can ignore it safely.
 
 
 pop = read_csv("https://www.opendata.nhs.scot/dataset/7f010430-6ce1-4813-b25c-f7f335bdc4dc/resource/27a72cc8-d6d8-430c-8b4f-3109a9ceadb1/download/hb2019_pop_est_03102025.csv") %>% 
@@ -160,7 +163,7 @@ data_list = map(data_list,
   
 all_data = data_list %>% 
   bind_rows(.id = "month_year") %>% 
-  separate( month_year, into = c("Month", "Year"), sep = "_") %>% 
+  separate( month_year, into = c("Month", "Year")) %>% 
   mutate(Year = as.numeric(Year))
 ```
 
@@ -184,6 +187,7 @@ Final_data = scotland_map %>%
   relocate(c("Shape_Leng", "Shape_Area"), .before = geometry) %>% 
   st_as_sf()## this keep the data we want to look at together, so its easy to read
 
+saveRDS(Final_data, here("Data/Final_data_server.rds"))
 ```
 
 
@@ -193,53 +197,7 @@ Final_data = scotland_map %>%
 
 ##### Now make our data sets for each month that we want
 
-```{r}
-
-ui = fluidPage(
-  titlePanel("Antibiotic Doses per Capita by Health Board"),
-  sidebarLayout(
-    sidebarPanel(
-      selectInput("Year", "Select Year", choices = c("2023", "2024")),
-      selectInput("Month", "Select Month", 
-                  choices = c("jun", "jul", "aug", "sep", "oct", "nov", "dec"))),
-    mainPanel(
-      plotOutput("antibiotic_map", height = "600px")
-    )))
-
-server = function(input, output, session) {
-
-  filtered_data = reactive({
-    df = Final_data %>%
-      filter(Year == as.numeric(input$Year),
-             Month == input$Month)
-  })
-
-output$antibiotic_map = renderPlot({
-    ggplot(filtered_data(), aes(fill = Dose_per_capita)) +
-      geom_sf(color = "white", size = 0.5)+
-scale_fill_continuous(
-    low = "white",
-    high = "darkblue",   
-    limits = c(1.2, 3),
-    labels = scales::label_comma())+
-      labs(
-        title = paste("Antibiotic Doses per Capita —",
-                      toupper(input$Month), input$Year),
-        subtitle = "Scottish Health Boards"
-      ) +
-      theme_minimal() +
-      theme(legend.position = "bottom")
-  })
-}
-
-shinyApp(ui, server)
-
-```
-
-
-
-
-
+<iframe src="https://rbarkham.shinyapps.io/antibiotics_map/" style="border: none; width: 50%; height: 800px"></iframe>
 
 ## Plotting our map plots
 ```{r eval=FALSE, include=FALSE}
