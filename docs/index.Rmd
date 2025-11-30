@@ -193,9 +193,15 @@ saveRDS(Final_data, here("Data/Final_data_server.rds"))
 
 ##### Now make our data sets for each month that we want
 
-<iframe src="https://rbarkham.shinyapps.io/antibiotics_map/" 
-        width="100%" height="2000px" style="border:1px solid red;">
+<iframe 
+  src="https://rbarkham.shinyapps.io/antibiotics_map/"
+  data-external="1"
+  width="100%" 
+  height="900px"
+  style="border: 1px solid #ccc; border-radius: 8px;"
+  loading="lazy">
 </iframe>
+
 
 ## Plotting our map plots
 ```{r eval=FALSE, include=FALSE}

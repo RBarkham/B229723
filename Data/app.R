@@ -1,10 +1,14 @@
 
 library(shiny)
-library(ggplot2) # we want to reduce our data load for our server, so we won't load the whole tidyverse - just what we need.
 library(scales)
 library(sf)
 library(dplyr)
-library(shinylive)
+library(shiny)
+library(ggplot2)
+if (FALSE) {
+  library(munsell)
+}
+
 
 
 
