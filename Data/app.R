@@ -4,6 +4,10 @@ library(ggplot2) # we want to reduce our data load for our server, so we won't l
 library(scales)
 library(sf)
 library(dplyr)
+library(shinylive)
+
+
+
 
 Final_data_server <- readRDS("Final_data_server.rds")
 #You would normally expect here() to start at the project working directory (B229723, however due to the nature of Shiny.io (where we host this app), here() actually starts us at Antibiotics_Maps.
@@ -18,7 +22,7 @@ ui = fluidPage(
       selectInput("Month", "Select Month", 
                   choices = c("jun", "jul", "aug", "sep", "oct", "nov", "dec"))),
     mainPanel(
-      plotOutput("antibiotic_map", height = "80vh", width = "100%")
+      plotOutput("antibiotic_map", height = "1000px", width = "100%")
     )))
 
 server = function(input, output, session) {
