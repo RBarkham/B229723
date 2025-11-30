@@ -1,11 +1,7 @@
 ---
 title: "Assesment"
-output:
-  html_document:
-    df_print: paged
+output: html_document
 date: "2025-10-31"
-editor_options:
-  chunk_output_type: inline
 ---
 
 ```{r setup, include=FALSE}
@@ -197,7 +193,9 @@ saveRDS(Final_data, here("Data/Final_data_server.rds"))
 
 ##### Now make our data sets for each month that we want
 
-<iframe src="https://rbarkham.shinyapps.io/antibiotics_map/" style="border: none; width: 50%; height: 800px"></iframe>
+<iframe src="https://rbarkham.shinyapps.io/antibiotics_map/" 
+        width="100%" height="2000px" style="border:1px solid red;">
+</iframe>
 
 ## Plotting our map plots
 ```{r eval=FALSE, include=FALSE}
