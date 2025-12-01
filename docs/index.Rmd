@@ -22,7 +22,7 @@ To investigate this, we will be using perscription data from NHS Scotland, popul
 
 
 ##### First, lets load out packages in
-```{R message=FALSE, warning=FALSE}
+```{R Package Load-in, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(janitor)
 library(gt)
@@ -34,6 +34,7 @@ library(glue)
 library(rsconnect)
 library(here)
 library(lubridate)
+library(reactable)
 ```
 
 
@@ -42,33 +43,36 @@ First lets load our temperature data, we can't directly download our data from t
 To solve this, whilst keeping our script portable, we can download it from the github repository. R studio get's a bit confused with .nc files, so we need to keep our data in a temporary file. We can then use this temporary file to properly load our data in
 
 
-```{r message=FALSE}
+```{r Reading Temp Data, message=FALSE}
 library(terra)
 library(purrr)
 
-URLs <- c(
+URLs = c(
   "2023" = "https://github.com/RBarkham/B229723/raw/refs/heads/main/docs/data/temp_2023.nc",
   "2024" = "https://github.com/RBarkham/B229723/raw/refs/heads/main/docs/data/temp_2024.nc"
-)
+  )
 
-Data_List_Temp <- map(URLs, ~{
-  Tmp_File <- tempfile(fileext = ".nc")
+Data_List_Temp = map(URLs, ~{
+  Tmp_File = tempfile(fileext = ".nc")
   download.file(.x, Tmp_File, mode = "wb")
   rast(Tmp_File)
-})
-Data_List_Temp <- imap(Data_List_Temp, ~{
-  names(.x) <- c(paste0(.y, "_", month.name))
+  })
+
+Data_List_Temp = imap(Data_List_Temp, ~{
+  names(.x) = c(paste0(.y, "_", month.name))
   (.x)
+  })
 #our data is in layers, one for each month. Currently the layers are named tasmin1, tasmin2 ect. This is difficult to understand. We use imaps() instead of maps here, becuase we want maps to keep a track of which year theyre from, and save it as .y. By using Names() we will rename these layers, (.x) applies it to both years; month.name is a in built vector which has all the months of the year. paste0() pastes whats sindie the brackets but removes any spaces the regular paste() function would have added - this is quicker than defining all the months manually. 
-})
+
 # Combine rasters into a single stack
-All_Temp <- c(Data_List_Temp$`2023`, Data_List_Temp$`2024`) #we dont use merge(), as it doesn't deal with our SpatRaster object type well
+All_Temp = c(Data_List_Temp$`2023`, 
+             Data_List_Temp$`2024`) #we dont use merge(), as it doesn't deal with our SpatRaster object type well
 
 ```
 
 Now, we want to plot this as a chloroplast, so we need to give R a map (Like how you have a colouring book to provide a guide, so you knwo where to colour in)
 
-```{r, message=FALSE}
+```{r Reading Map Data, message=FALSE}
 Scotland_Map = st_read("/vsizip/vsicurl/https://maps.gov.scot/ATOM/shapefiles/SG_NHS_HealthBoards_2019.zip/SG_NHS_HealthBoards_2019.shp", quiet = TRUE) %>% 
   st_simplify( dTolerance = 1000) %>% #st_simplify makes our map data less data-intensive, and helps it run quicker
   st_transform( crs(All_Temp)) # st_transform makes sure that our map data will work with our temp data 
@@ -80,12 +84,15 @@ Scotland_Map = st_read("/vsizip/vsicurl/https://maps.gov.scot/ATOM/shapefiles/SG
 
 
 
-```{r message=FALSE, paged.print=TRUE}
-Temp_df = exact_extract(All_Temp, Scotland_Map, "mean" ,full_colnames = FALSE, append_cols = "HBName") 
+```{r Raster --> DF conversion, message=FALSE, paged.print=TRUE}
+Temp_df = exact_extract(All_Temp, Scotland_Map, "mean" ,
+                        full_colnames = FALSE, 
+                        append_cols = "HBName") %>% 
+                                                select(-matches("(January|February|March|April|May)"))
 
-names(Temp_df) <- gsub("^mean.", "", names(Temp_df)) #exact_extract adds "mean." to our column names. You can't prevent this, so we'll have to remove it so we can reliabily proccess our data down the line
+names(Temp_df) = gsub("mean.", "", names(Temp_df)) #exact_extract adds "mean." to our column names. You can't prevent this, so we'll have to remove it so we can reliabily proccess our data down the line
 
-Temp_df_Long <- Temp_df %>%
+Temp_df_Long = Temp_df %>%
   pivot_longer(
     cols = -c(HBName),   # we select the colums we want to tien into rows (all except HBName which )
     names_to = "Year_Month",     # new column name for month
@@ -93,23 +100,34 @@ Temp_df_Long <- Temp_df %>%
   ) %>% 
   separate("Year_Month", into = c("Year", "Month")) %>% 
   mutate(Year = as.numeric(Year))
+```
 
+```{r Joining Temp to Map Data}
+dropdown_filter_temp = function(values, name) {
+  tags$select(
+    onchange = sprintf(
+      "Reactable.setFilter('temp-table', '%s', event.target.value || undefined)",
+      name),
+    tags$option(value = "", "All"),            
+    lapply(sort(unique(values)), tags$option),
+    style = "width: 100%; height: 28px;")}
 
-Temp_Map = Scotland_Map %>% 
-  #lets pipe our temp data into our joining function, we ideally want to keep the less important information (shape and geometry) our of the way, by specifying map as the second data set, it will add it to the right-hand side.
-  left_join(Temp_df_Long) %>%
-  relocate(Shape_Leng, Shape_Area, .before = last_col())
-  #here, we tell it to join with map. If we use full_join, it makes sure there are no empty rows.
-   # when we joined, the data lost its sf properties which make it suitbale for map plotting, we can restore it with st_as_sf()
-Temp_Map
-
-saveRDS(Temp_Map, here("Data/Temp_Map_Server.rds"))
-#If we didn't want our data to be as neat, we could have swapped the order of Temp_2024 and map in our full_join and skipped the st_as_sf() stage. However, by doing it this way its easier to read our data as we work because our names are next to the temperatures
+# Create the table
+reactable(
+  Temp_df_Long,
+  filterable = TRUE,
+  pagination = FALSE,
+  height = 300,
+  defaultColDef = colDef(
+    filterInput = dropdown_filter_temp),
+  columns = list(
+    Min_Temperature = colDef(filterable = FALSE)),
+  elementId = "temp-table"
+)
 ```
 
 
-
-```{R, message=FALSE}
+```{R Reading in Antibioitics Data, message=FALSE}
 Antibiotics_data = c( ##### First we will collate our data into a list, so we can process it all with one command, and add more data if required easily
   "2023_June" = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/66e9611a-fbea-45b2-9edd-351c388fd06d/download/pitc202306.csv",
   
@@ -139,12 +157,15 @@ Antibiotics_data = c( ##### First we will collate our data into a list, so we ca
  
   "2024_December" = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/e4380152-3d16-446b-9072-108e93cf5caa/download/pitc202412.csv")
 
-Data_List_Antibiotics = map(Antibiotics_data, ~ read_csv(.x) %>% 
-                  clean_names()) ## you'll notice we had an error when we were loading "Parsing issue", lets check that out
+Data_List_Antibiotics = map(Antibiotics_data, ~ 
+                            read_csv(.x) %>% 
+                            clean_names()
+                            ) 
+## you'll notice we had an error when we were loading "Parsing issue", lets check that out
 ```
 
 
-```{r message=FALSE}
+```{r Error investigation}
 map(Data_List_Antibiotics, ~problems(.x)) ### we can see that there is missing data for Sucralfate (Nu), on Row Number 150,115 in Nov_2023 (our 6th tibble, and our 6th month)
 
 error = Data_List_Antibiotics$`2023_November` %>% 
@@ -154,7 +175,7 @@ error = Data_List_Antibiotics$`2023_November` %>%
 ```
 
 
-```{r}
+```{r Reading in Pop Data, message=FALSE}
 pop = read_csv("https://www.opendata.nhs.scot/dataset/7f010430-6ce1-4813-b25c-f7f335bdc4dc/resource/27a72cc8-d6d8-430c-8b4f-3109a9ceadb1/download/hb2019_pop_est_03102025.csv") %>% 
   clean_names()%>%
   filter(year %in% c("2023", "2024") &
@@ -176,8 +197,8 @@ pop = read_csv("https://www.opendata.nhs.scot/dataset/7f010430-6ce1-4813-b25c-f7
 ##### Lets read out map data
 
 ##### Lets join our map and healthboard perscription data
-```{r}
-Slimmed_data_list = Data_List_Antibiotics %>%
+```{r Filtering and Combining Antibiotics Data, message=FALSE}
+Slimmed_data_list_Antibiotics = Data_List_Antibiotics %>%
   map(~ dplyr::select(
                     .x, -c(gp_practice,
                     dmd_code,
@@ -187,39 +208,114 @@ Slimmed_data_list = Data_List_Antibiotics %>%
                     number_of_paid_items)))
 #we don't need this information, so we'll remove it to lighten our processing load
 
-Filtered_Data_List_Antibiotics = map(Slimmed_data_list,
+Filtered_Data_List_Antibiotics = map(Slimmed_data_list_Antibiotics,
     ~filter(.x, startsWith(bnf_item_code, "05010") &
               hbt != "SB0806")) 
   # Antibiotics start their BNF code with "0510", so we will filter based on that
 
-Antibiotic_data <- Filtered_Data_List_Antibiotics %>%
+Antibiotics_data = Filtered_Data_List_Antibiotics %>%
   bind_rows(.id = "Year_Month") %>%
   separate("Year_Month", into = c("Year", "Month")) %>% 
   mutate(Year = as.numeric(Year))
 ```
 
-```{r paged.print=TRUE}
-Tally_Antibiotic_Data = Antibiotic_data %>% 
+```{r Calculating Stats and Joining Healthboard Data, paged.print=TRUE}
+Tally_Antibiotics_Data = Antibiotics_data %>% 
   group_by(hbt,
            Year,
            Month) %>% 
   summarise(total_quanity = sum(paid_quantity, na.rm = TRUE), .groups = "keep")
 
-Antibiotic_pop_data = Tally_Antibiotic_Data %>% 
+Antibiotics_pop_data = Tally_Antibiotics_Data %>% 
   left_join(pop, join_by(hbt == hb, Year == year)) #by using left join, we tell R to keep the long months rather than short ones.
 
 
-Antibiotic_dose_pc = Antibiotic_pop_data %>% 
+Antibiotics_dose_pc = Antibiotics_pop_data %>% 
   mutate(Dose_per_capita = total_quanity/all_ages) %>% 
-  subset( select = -c(all_ages, total_quanity))
+  subset(select = -c(all_ages, total_quanity))
 
-Final_data = Scotland_Map %>% 
-  full_join(Antibiotic_dose_pc, 
+```
+
+```{r Joining Antibiotic and Map Data}
+Antibiotics_Map = Scotland_Map %>% 
+  full_join(Antibiotics_dose_pc, 
              join_by(HBCode == hbt))%>% 
   relocate(c("Shape_Leng", "Shape_Area"), .before = geometry)
 
-saveRDS(Final_data, here("Data/Antibiotics_Map_Server.rds")) # we'll save this for later
+  Antibiotics_Map_Table = Antibiotics_Map %>%
+    st_drop_geometry() %>% 
+  select(-HBCode, -Shape_Leng, -Shape_Area)
+
+saveRDS(Antibiotics_Map, here("Data/Antibiotics_Map_Server.rds")) # we'll save this for later
 ```
+
+
+```{r Antibiotics Data Table}
+library(reactable)
+
+# Dropdown filter function
+dropdown_filter_Antibiotics = function(values, name) {
+  tags$select(
+    onchange = sprintf(
+      "Reactable.setFilter('antibiotics-table', '%s', event.target.value || undefined)", name),
+    tags$option(value = "", "All"),
+    lapply(sort(unique(values)), tags$option),
+    style = "width: 100%; height: 30px;"
+  )}
+
+# Create the table
+reactable(
+  Antibiotics_Map_Table,
+  filterable = TRUE,
+  pagination = FALSE,
+  height = 700,
+  defaultColDef = colDef(
+    filterInput = dropdown_filter_Antibiotics),
+  columns = list(
+    Dose_per_capita = colDef(filterable = FALSE)),
+  elementId = "antibiotics-table")
+
+```
+
+```{r Preliminary Graphs}
+June_December_Antibiotics = Antibiotics_Map_Table %>%
+  filter(Month %in% c("June", "December")) # we don't need the mapping data, so we'll use the version before it.
+
+June_December_Temp = Temp_df_Long %>%  
+                          filter(Month %in% c("June", "December"))
+
+June_December_joined = full_join(Temp_df_Long, Antibiotics_dose_pc, relationship = "many-to-many") %>% 
+  ungroup() %>% select(-hbt) # we have alot of overlapping data, so we can disable the "many-to-many" warning which warns you that you might be joining duplicates
+                          
+ggplot(June_December_Antibiotics, aes(x = HBName, y = Dose_per_capita, fill = Month)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~ Year) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  
+ggplot(June_December_Temp, aes(x = HBName, y = Min_Temperature, fill = Month)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~ Year) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(June_December_joined, aes(x = Min_Temperature, y = Dose_per_capita)) +
+  geom_point(size = 1, color = "blue") +
+  facet_wrap(~ Year) +
+  geom_smooth(method = "lm", se = FALSE, color = "red") +  # optional trend line
+  labs(x = "Minimum Temperature", y = "Dose per Capita",
+       title = "Scatter plot of Dose per Capita vs Minimum Temperature") +
+  theme_minimal()
+```
+
+
+
+
+
+
+
+
+
 
 Now, we're going to make our data interactive, so you'll have a widget where you can browse graphs by year and month.
 
@@ -236,7 +332,7 @@ Secondly, we need a UI (How we tell the app what our variables are, and what the
 Lastly, we need a server (the brains of the app, which interprets our selections/inputs to produce a output (a graph))
 
 
-```{r eval=FALSE, collaspe=TRUE}
+```{r Shiny App, eval=FALSE}
 ---
 #Shiny web app
 ---
@@ -323,17 +419,17 @@ shinyApp(UI, Server)) #tells R to run the app
 
 <iframe 
   src="https://rbarkham.shinyapps.io/antibiotics_map/"
-  data-external="1"
   width="100%" 
   height="900px"
   style="border: 1px solid #ccc; border-radius: 8px;"
-  loading="lazy">
+  frameborder="0"
+  scrolling="yes">
 </iframe>
 
+Fromt the plots we can see an inverse relationship 
 
 ## Plotting our map plots
 
-```
 # Next steps:
 ##### 1) expand range of data, to include months inbetween, and 2023
 ##### 2) use facets/map to combine by year, possibly using .gif to display change too
