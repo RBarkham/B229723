@@ -1,59 +1,77 @@
-
 library(shiny)
 library(scales)
 library(sf)
 library(dplyr)
-library(shiny)
 library(ggplot2)
-if (FALSE) {
-  library(munsell)
-}
+library(lubridate)  # Added for potential date handling
 
+Antibiotics_Map_Server = readRDS("Antibiotics_Map_Server.rds")
+Temp_Map_Server = readRDS("Temp_Map_Server.rds")
 
-
-
-
-Final_data_server <- readRDS("Final_data_server.rds")
-#You would normally expect here() to start at the project working directory (B229723, however due to the nature of Shiny.io (where we host this app), here() actually starts us at Antibiotics_Maps.
-
-
-ui = fluidPage(
+UI <- fluidPage(
   titlePanel("Antibiotic Doses per Capita by Health Board"),
   sidebarLayout(
     sidebarPanel(
       selectInput("Year", "Select Year", 
-                  choices = c("2023", "2024")),
+                  choices = c(2023, 2024)),
       selectInput("Month", "Select Month", 
-                  choices = c("jun", "jul", "aug", "sep", "oct", "nov", "dec"))),
+                  choices = c("June", "July", "August", "September", 
+                              "October", "November", "December"))),
     mainPanel(
-      plotOutput("antibiotic_map", height = "1000px", width = "100%")
-    )))
+      fluidRow(splitLayout(cellWidths = c("50%", "50%"),
+      plotOutput("Antibiotic_Map", height = "1000px"), plotOutput("Min_Temp_Map", height = "1000px")
+      )))
+  )
+)
 
-server = function(input, output, session) {
+Server <- function(input, output, session) {
   
-  filtered_data = reactive({
-    df = Final_data_server %>%
-      filter(Year == as.numeric(input$Year),
+  Filtered_Data_Antibiotics <- reactive({
+    Antibiotics_Map_Server %>%
+      filter(Year == input$Year,
              Month == input$Month)
   })
-
+   
+  Filtered_Data_Min_Temp <- reactive({
+    Temp_Map_Server %>%
+      filter(Year == input$Year,
+             Month == input$Month)
+  })
   
-  output$antibiotic_map = renderPlot({
-    ggplot(filtered_data(), aes(fill = Dose_per_capita)) +
-      geom_sf(color = "white", size = 0.5)+
+  output$Antibiotic_Map <- renderPlot({
+    Antibiotics_Data = Filtered_Data_Antibiotics()
+    ggplot(Antibiotics_Data, aes(fill = Dose_per_capita)) +
+      geom_sf(color = "#e6f2ff", size = 0.5) +
       scale_fill_continuous(
-        low = "white",
-        high = "darkblue",   
+        low = "darkblue", high = "white", 
         limits = c(1.2, 3),
-        labels = scales::label_comma())+
+        labels = label_comma()) +
       labs(
         title = paste("Antibiotic Doses per Capita —",
+                      input$Month, input$Year),
+        subtitle = "By Scottish Health Boards"
+      ) +
+      theme_minimal() +
+      theme(legend.position = "bottom")
+    
+  })
+
+  output$Min_Temp_Map = renderPlot({
+    Data_Min_Temp = Filtered_Data_Min_Temp()
+    ggplot(Data_Min_Temp, aes(fill = Min_Temperature)) +
+      geom_sf(color = "#e6f2ff", size = 0.5) +
+      scale_fill_continuous(
+        low = "darkblue", high = "white", 
+        limits = c(-0.75, 11.5),
+        labels = label_number()) +
+      labs(
+        title = paste("Minimum Temperature —",
                       toupper(input$Month), input$Year),
-        subtitle = "Scottish Health Boards"
+        subtitle = "By Scottish Health Boards"
       ) +
       theme_minimal() +
       theme(legend.position = "bottom")
   })
 }
 
-shinyApp(ui, server)
+shinyApp(UI, Server)
