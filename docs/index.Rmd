@@ -11,16 +11,8 @@ date: "2025-10-31"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-klippy::klippy(
-  lang = c("r", "markdown"),
-  all_precode = FALSE,
-  position = c("top", "right"),
-  color = "auto",
-  tooltip_message = "Copy code",
-  tooltip_success = "Copied!"
-)
-```
 
+```
 
 # Intro - Is there an assocation between antibiotic perscription rate and the seasons? How does this vary by healthboard?
 
@@ -47,7 +39,6 @@ install.packages("glue")
 install.packages("here")
 install.packages("reactable")
 install.packages("rmdformats")
-remotes::install_github("rlesur/klippy") # this isn't part of the R Cran, so we cant use install.packages(), but gives up copy buttons for our chunks
 ```
 
 
@@ -62,8 +53,6 @@ library(shiny)
 library(here)
 library(reactable)
 library(rmdformats)
-library(purrr)
-library(klippy)
 ```
 
 
@@ -339,21 +328,27 @@ June_December_joined = full_join(Temp_df_Long, Antibiotics_dose_pc, relationship
 ggplot(June_December_Antibiotics, aes(x = HBName, y = Dose_per_capita, fill = Month)) +
   geom_bar(stat = "identity", position = "dodge") +
   facet_wrap(~ Year) +
+  labs(x = " NHS Heath Board", y = "Antibiotic Doses per Capita",
+       title = "Minimum Temperatures in June and December, by NHS Health Board") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+  plot.margin = margin(t = 10, r = 10, b = 10, l = 30))
   
 ggplot(June_December_Temp, aes(x = HBName, y = Min_Temperature, fill = Month)) +
   geom_bar(stat = "identity", position = "dodge") +
   facet_wrap(~ Year) +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  labs(x = " NHS Heath Board", y = "Minimum Temperature",
+       title = "Minimum Temperatures in June and December, by NHS Health Board") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+  plot.margin = margin(t = 10, r = 10, b = 10, l = 30))
 
 ggplot(June_December_joined, aes(x = Min_Temperature, y = Dose_per_capita)) +
   geom_point(size = 1, color = "blue") +
   facet_wrap(~ Year) +
   geom_smooth(method = "lm", se = FALSE, color = "red") +  # optional trend line
-  labs(x = "Minimum Temperature", y = "Dose per Capita",
-       title = "Scatter plot of Dose per Capita vs Minimum Temperature") +
+  labs(x = "Minimum Temperature", y = " Antibiotic Doses per Capita",
+       title = "Scatter plot of Antibiotic Doses per Capita vs Minimum Temperature") +
   theme_minimal()
 ```
 
