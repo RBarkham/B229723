@@ -41,10 +41,13 @@ Server <- function(input, output, session) {
   output$Antibiotic_Map <- renderPlot({
     Antibiotics_Data = Filtered_Data_Antibiotics()
     ggplot(Antibiotics_Data, aes(fill = Dose_per_capita)) +
-      geom_sf(color = "#e6f2ff", size = 0.5) +
-      scale_fill_continuous(
-        low = "darkblue", high = "white", 
-        limits = c(1.2, 3),
+      geom_sf(color = "black", size = 0.5) +
+      scale_fill_gradient2(
+        low = "#313695",
+        mid = "#F5E3FA",
+        high = "#A50026",
+        midpoint = 2.2,
+        limits = c(1.2, 3.2),
         labels = label_comma()) +
       labs(
         title = paste("Antibiotic Doses per Capita —",
@@ -59,14 +62,17 @@ Server <- function(input, output, session) {
   output$Min_Temp_Map = renderPlot({
     Data_Min_Temp = Filtered_Data_Min_Temp()
     ggplot(Data_Min_Temp, aes(fill = Min_Temperature)) +
-      geom_sf(color = "#e6f2ff", size = 0.5) +
-      scale_fill_continuous(
-        low = "darkblue", high = "white", 
-        limits = c(-0.75, 11.5),
+      geom_sf(color = "black", size = 0.5) +
+      scale_fill_gradient2(
+        low = "#313695",
+        mid = "#F5E3FA",
+        high = "#A50026",
+        midpoint = 5.5,
+        limits = c(-0.75, 11.75),
         labels = label_number()) +
       labs(
         title = paste("Minimum Temperature —",
-                      toupper(input$Month), input$Year),
+                      input$Month, input$Year),
         subtitle = "By Scottish Health Boards"
       ) +
       theme_minimal() +

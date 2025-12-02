@@ -1,17 +1,29 @@
 ---
-title: "Assesment"
-output: html_document
+title: "B229723 - Programming Assignment"
+output:
+  rmdformats::material:
+    toc_float: true
+    number_sections: true
+    code_folding: show
+    copy_code: true
 date: "2025-10-31"
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-options(timeout = 600)
+klippy::klippy(
+  lang = c("r", "markdown"),
+  all_precode = FALSE,
+  position = c("top", "right"),
+  color = "auto",
+  tooltip_message = "Copy code",
+  tooltip_success = "Copied!"
+)
 ```
 
 
-# R Programing Assignment - B229723
-### Is there an assocation between antibiotic perscription rate and the seasons? How does this vary by healthboard?
+# Intro - Is there an assocation between antibiotic perscription rate and the seasons? How does this vary by healthboard?
+
 
 Antibiotics are one of the most widely prescribed class of medications, with (insert number) of people being prescribed them annually in the UK. Consequently, understanding the factors which influence prescription is paramount. This is especially important with the rise of antibiotic resistance, where over prescription promotes antibiotic resistance. 
 
@@ -21,31 +33,49 @@ To investigate this, we will be using perscription data from NHS Scotland, popul
 
 
 
-##### First, lets load out packages in
+# Our Packages
+If you dont have any of these, copy the installation chunk below
+```{R Package install, eval=FALSE, message=FALSE, warning=FALSE, class.source='fold-hide'}
+# let's load our packages in 
+install.packages("tidyverse")
+install.packages("janitor")
+install.packages("sf")
+install.packages("terra")
+install.packages("exactextractr")
+install.packages("shiny")
+install.packages("glue")
+install.packages("here")
+install.packages("reactable")
+install.packages("rmdformats")
+remotes::install_github("rlesur/klippy") # this isn't part of the R Cran, so we cant use install.packages(), but gives up copy buttons for our chunks
+```
+
+
 ```{R Package Load-in, message=FALSE, warning=FALSE}
+# let's load our packages in 
 library(tidyverse)
 library(janitor)
-library(gt)
 library(sf)
 library(terra)
 library(exactextractr)
 library(shiny)
-library(glue)
-library(rsconnect)
 library(here)
-library(lubridate)
 library(reactable)
+library(rmdformats)
+library(purrr)
+library(klippy)
 ```
 
 
+# Reading in Our Data
+## Temp Data
 First lets load our temperature data, we can't directly download our data from the CEDA website due to the login required (and the API which bypasses this is not yet functional)
 
-To solve this, whilst keeping our script portable, we can download it from the github repository. R studio get's a bit confused with .nc files, so we need to keep our data in a temporary file. We can then use this temporary file to properly load our data in
+To solve this, whilst keeping our script portable, we can download it from the github repository. R studio get's a bit confused with .nc files, so we need to keep our data in a temporary file. We can then use this temporary file to properly load our data in.
 
+If you'd like to access the data manually, you can create a CEDA account and download the data directly: https://catalogue.ceda.ac.uk/uuid/f02cc6ddd92f45b18b9ab6ab544df7d9/
 
 ```{r Reading Temp Data, message=FALSE}
-library(terra)
-library(purrr)
 
 URLs = c(
   "2023" = "https://github.com/RBarkham/B229723/raw/refs/heads/main/docs/data/temp_2023.nc",
@@ -62,7 +92,7 @@ Data_List_Temp = imap(Data_List_Temp, ~{
   names(.x) = c(paste0(.y, "_", month.name))
   (.x)
   })
-#our data is in layers, one for each month. Currently the layers are named tasmin1, tasmin2 ect. This is difficult to understand. We use imaps() instead of maps here, becuase we want maps to keep a track of which year theyre from, and save it as .y. By using Names() we will rename these layers, (.x) applies it to both years; month.name is a in built vector which has all the months of the year. paste0() pastes whats sindie the brackets but removes any spaces the regular paste() function would have added - this is quicker than defining all the months manually. 
+#our data is in layers, one for each month. Currently the layers are named tasmin1, tasmin2 ect. This is difficult to understand. We use imaps() instead of maps here, becuase we want maps to keep a track of which year theyre from, and save it as .y. By using Names() we will rename these layers, (.x) applies it to both years; month.name is a in built vector which has all the months of the year. paste0() pastes whats insidie the brackets but removes any spaces the regular paste() function would have added - this is quicker than defining all the months manually. 
 
 # Combine rasters into a single stack
 All_Temp = c(Data_List_Temp$`2023`, 
@@ -70,64 +100,23 @@ All_Temp = c(Data_List_Temp$`2023`,
 
 ```
 
-Now, we want to plot this as a chloroplast, so we need to give R a map (Like how you have a colouring book to provide a guide, so you knwo where to colour in)
+## Antibiotics Data
+We can download our data directtly from the Website at : https://www.opendata.nhs.scot/dataset/prescriptions-in-the-community
 
-```{r Reading Map Data, message=FALSE}
-Scotland_Map = st_read("/vsizip/vsicurl/https://maps.gov.scot/ATOM/shapefiles/SG_NHS_HealthBoards_2019.zip/SG_NHS_HealthBoards_2019.shp", quiet = TRUE) %>% 
-  st_simplify( dTolerance = 1000) %>% #st_simplify makes our map data less data-intensive, and helps it run quicker
-  st_transform( crs(All_Temp)) # st_transform makes sure that our map data will work with our temp data 
-
-#because our temp data is the same, formating our data to one year will work on all years 
-
-### https://cu-esiil.github.io/forest-carbon-codefest/collaborating-on-the-cloud/cyverse_data_management/ 
+```{R Reading in Antibioitics Data, eval=FALSE}
+Antibiotics_data = c( 
+  "2023_June" = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/66e9611a-fbea-45b2-9edd-351c388fd06d/download/pitc202306.csv",
+  
+  "2023_July" = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/7bb45ee6-6f1c-45f4-933b-958bdbe0ca4f/download/pitc202307.csv"
+  
+  Data_List_Antibiotics = map(Antibiotics_data, ~ 
+                            read_csv(.x) %>% 
+                            clean_names()
+  # First we will collate our data into a list, so we can process it all with one command, and add more data if required easily, here's the first couple, expand the code below to see the full thing.
 ```
 
 
-
-```{r Raster --> DF conversion, message=FALSE, paged.print=TRUE}
-Temp_df = exact_extract(All_Temp, Scotland_Map, "mean" ,
-                        full_colnames = FALSE, 
-                        append_cols = "HBName") %>% 
-                                                select(-matches("(January|February|March|April|May)"))
-
-names(Temp_df) = gsub("mean.", "", names(Temp_df)) #exact_extract adds "mean." to our column names. You can't prevent this, so we'll have to remove it so we can reliabily proccess our data down the line
-
-Temp_df_Long = Temp_df %>%
-  pivot_longer(
-    cols = -c(HBName),   # we select the colums we want to tien into rows (all except HBName which )
-    names_to = "Year_Month",     # new column name for month
-    values_to = "Min_Temperature"  # new column name for values
-  ) %>% 
-  separate("Year_Month", into = c("Year", "Month")) %>% 
-  mutate(Year = as.numeric(Year))
-```
-
-```{r Joining Temp to Map Data}
-dropdown_filter_temp = function(values, name) {
-  tags$select(
-    onchange = sprintf(
-      "Reactable.setFilter('temp-table', '%s', event.target.value || undefined)",
-      name),
-    tags$option(value = "", "All"),            
-    lapply(sort(unique(values)), tags$option),
-    style = "width: 100%; height: 28px;")}
-
-# Create the table
-reactable(
-  Temp_df_Long,
-  filterable = TRUE,
-  pagination = FALSE,
-  height = 300,
-  defaultColDef = colDef(
-    filterInput = dropdown_filter_temp),
-  columns = list(
-    Min_Temperature = colDef(filterable = FALSE)),
-  elementId = "temp-table"
-)
-```
-
-
-```{R Reading in Antibioitics Data, message=FALSE}
+```{r Reading in Antibiotic data (cont), message=FALSE, class.source='fold-hide'}
 Antibiotics_data = c( ##### First we will collate our data into a list, so we can process it all with one command, and add more data if required easily
   "2023_June" = "https://www.opendata.nhs.scot/dataset/84393984-14e9-4b0d-a797-b288db64d088/resource/66e9611a-fbea-45b2-9edd-351c388fd06d/download/pitc202306.csv",
   
@@ -161,19 +150,26 @@ Data_List_Antibiotics = map(Antibiotics_data, ~
                             read_csv(.x) %>% 
                             clean_names()
                             ) 
-## you'll notice we had an error when we were loading "Parsing issue", lets check that out
+## you'll notice we had an error when we were loading "Parsing issue", in this instance we can ignore it, if you want to see more about it - look at the folded chunk below 
 ```
-
-
-```{r Error investigation}
-map(Data_List_Antibiotics, ~problems(.x)) ### we can see that there is missing data for Sucralfate (Nu), on Row Number 150,115 in Nov_2023 (our 6th tibble, and our 6th month)
+## Optional - Addressing Parsing Errors in Antibiotic Data
+```{r Error investigation, class.source = 'fold-hide'}
+map_df(names(Data_List_Antibiotics),
+  ~ problems(Data_List_Antibiotics[[.x]]) %>%
+      mutate(File = .x),  # tells us where thee error is
+  .id = NULL
+) ### we can see that there is missing data for Sucralfate (Nu), on Row Number 150,115 in Nov_2023 (our 6th tibble, and our 6th month)
 
 error = Data_List_Antibiotics$`2023_November` %>% 
-  slice(150114) # we want to isolate the problematic row, so we will use slice() to isolate by row number. We have to take 1 off our number, to account for the fact the slice() doesn't count the header, like base r does in problems(} 
+  slice(150114)
+print(error) # we want to isolate the problematic row, so we will use slice() to isolate by row number. We have to take 1 off our number, to account for the fact the slice() doesn't count the header, like base r does in problems(} 
 
 # we can see that there no paid_quantity, gross_ingredient_cost nor paid_date_month, so was missing 3 columns. However, this isn't for an antibiotic, so it's not relevant for our purposes and we can ignore it safely.
 ```
 
+## Population Data
+We'll be using data from Public Health Scotland again, to provide population statistics. If you'd like to manually download the data, it can be found here https://www.opendata.nhs.scot/dataset/population-estimates/resource/27a72cc8-d6d8-430c-8b4f-3109a9ceadb1
+(Note, the website states popualtion dtaa is from 1981-2023, but actually streches to 2024 too)
 
 ```{r Reading in Pop Data, message=FALSE}
 pop = read_csv("https://www.opendata.nhs.scot/dataset/7f010430-6ce1-4813-b25c-f7f335bdc4dc/resource/27a72cc8-d6d8-430c-8b4f-3109a9ceadb1/download/hb2019_pop_est_03102025.csv") %>% 
@@ -181,22 +177,47 @@ pop = read_csv("https://www.opendata.nhs.scot/dataset/7f010430-6ce1-4813-b25c-f7
   filter(year %in% c("2023", "2024") &
            sex == "All" &
            hb != "S92000003") %>% 
-  dplyr::select(hb, all_ages, year) 
+  dplyr::select(hb, all_ages, year) #base R also has a select(). R can get confued to which select() you want to use, so adding dplyr:: before select() helps R pick the correct one (the dplyr version)
+```
+
+## Map data
+Now, we want ultimaltey want to plot our data as a chloropleths, so we need to give R a map (Like how you have a colouring book to provide a guide, so you knwo where to colour in).
+
+We can download our map data from the Scottish Goverment website at: https://www.spatialdata.gov.scot/geonetwork/srv/eng/catalog.search#/metadata/f12c3826-4b4b-40e6-bf4f-77b9ed01dc14
+```{r Reading Map Data, message=FALSE}
+Scotland_Map = st_read("/vsizip/vsicurl/https://maps.gov.scot/ATOM/shapefiles/SG_NHS_HealthBoards_2019.zip/SG_NHS_HealthBoards_2019.shp", quiet = TRUE) %>% 
+  st_simplify( dTolerance = 1000) %>% #st_simplify makes our map data less data-intensive, and helps it run quicker
+  st_transform( crs(All_Temp)) # st_transform makes sure that our map data will work with our temp data 
+
+#because our temp data is the same, formating our data to one year will work on all years 
+
+### https://cu-esiil.github.io/forest-carbon-codefest/collaborating-on-the-cloud/cyverse_data_management/ 
 ```
 
 
 
+# Data Wrangling and Joining
 
-##### We'll get rid of any collums which we won't need, so its easier to work with
+## Temperature Data
+```{r Raster --> DF conversion, message=FALSE, results='hide'}
+Temp_df = exact_extract(All_Temp, Scotland_Map, "mean" ,
+                        full_colnames = FALSE, 
+                        append_cols = "HBName") %>% 
+                                                select(-matches("(January|February|March|April|May)"))
 
+names(Temp_df) = gsub("mean.", "", names(Temp_df)) #exact_extract adds "mean." to our column names. You can't prevent this, so we'll have to remove it so we can reliabily proccess our data down the line
 
-####
+Temp_df_Long = Temp_df %>%
+  pivot_longer(
+    cols = -c(HBName),   # we select the colums we want to tien into rows (all except HBName which )
+    names_to = "Year_Month",     # new column name for month
+    values_to = "Min_Temperature"  # new column name for values
+  ) %>% 
+  separate("Year_Month", into = c("Year", "Month")) %>% 
+  mutate(Year = as.numeric(Year))
+```
 
-
-### Joining our data to healthboards, and plotting on a map.
-##### Lets read out map data
-
-##### Lets join our map and healthboard perscription data
+## Antibiotics Data
 ```{r Filtering and Combining Antibiotics Data, message=FALSE}
 Slimmed_data_list_Antibiotics = Data_List_Antibiotics %>%
   map(~ dplyr::select(
@@ -249,7 +270,31 @@ Antibiotics_Map = Scotland_Map %>%
 saveRDS(Antibiotics_Map, here("Data/Antibiotics_Map_Server.rds")) # we'll save this for later
 ```
 
+# Tables of our data
 
+```{r Joining Temp to Map Data}
+dropdown_filter_temp = function(values, name) {
+  tags$select(
+    onchange = sprintf(
+      "Reactable.setFilter('temp-table', '%s', event.target.value || undefined)",
+      name),
+    tags$option(value = "", "All"),            
+    lapply(sort(unique(values)), tags$option),
+    style = "width: 100%; height: 28px;")}
+
+# Create the table
+reactable(
+  Temp_df_Long,
+  filterable = TRUE,
+  pagination = FALSE,
+  height = 500,
+  defaultColDef = colDef(
+    filterInput = dropdown_filter_temp),
+  columns = list(
+    Min_Temperature = colDef(filterable = FALSE)),
+  elementId = "temp-table"
+)
+```
 ```{r Antibiotics Data Table}
 library(reactable)
 
@@ -268,7 +313,7 @@ reactable(
   Antibiotics_Map_Table,
   filterable = TRUE,
   pagination = FALSE,
-  height = 700,
+  height = 500,
   defaultColDef = colDef(
     filterInput = dropdown_filter_Antibiotics),
   columns = list(
@@ -277,7 +322,11 @@ reactable(
 
 ```
 
-```{r Preliminary Graphs}
+
+
+# Preliminary Graphs, and Looking for Associations
+
+```{r Preliminary Graphs, message=FALSE}
 June_December_Antibiotics = Antibiotics_Map_Table %>%
   filter(Month %in% c("June", "December")) # we don't need the mapping data, so we'll use the version before it.
 
@@ -316,6 +365,7 @@ ggplot(June_December_joined, aes(x = Min_Temperature, y = Dose_per_capita)) +
 
 
 
+# Interactive Maps
 
 Now, we're going to make our data interactive, so you'll have a widget where you can browse graphs by year and month.
 
@@ -331,17 +381,20 @@ Firstly, we need the data for the graphs (This is Final_data_server)
 Secondly, we need a UI (How we tell the app what our variables are, and what the option are. On top of this, The UI controls charts will be displayed to us, i.e width and height)
 Lastly, we need a server (the brains of the app, which interprets our selections/inputs to produce a output (a graph))
 
+You can read up more Shiny.IO and Shiny here: 
+https://shiny.posit.co/r/getstarted/shiny-basics/lesson1/
+https://docs.posit.co/shinyapps.io/guide/
 
-```{r Shiny App, eval=FALSE}
+```{r Shiny App,class.source = 'fold-hide', eval=FALSE}
 ---
-#Shiny web app
+#Shiny web app, Whilst not shown, you will have to enable to your shiny.io connection with your unique token (see shiny.io user guide)
 ---
 library(shiny)
 library(scales)
 library(sf)
 library(dplyr)
 library(ggplot2)
-library(lubridate)  # Added for potential date handling
+library(rsconnect)
 
 Antibiotics_Map_Server = readRDS("Antibiotics_Map_Server.rds")
 Temp_Map_Server = readRDS("Temp_Map_Server.rds")
@@ -419,20 +472,20 @@ shinyApp(UI, Server)) #tells R to run the app
 
 <iframe 
   src="https://rbarkham.shinyapps.io/antibiotics_map/"
+  data-external="1"
+  style="border: none"
   width="100%" 
   height="900px"
-  style="border: 1px solid #ccc; border-radius: 8px;"
   frameborder="0"
-  scrolling="yes">
+  scrolling="no">
 </iframe>
 
-Fromt the plots we can see an inverse relationship 
 
-## Plotting our map plots
+From the plots we can see an inverse relationship between antibiotics prescription and minimum temperature - as it gets warmer, less antibiotics are prescribed.
+
+
 
 # Next steps:
-##### 1) expand range of data, to include months inbetween, and 2023
-##### 2) use facets/map to combine by year, possibly using .gif to display change too
-##### 3) plot dose per capita over time, maybe also plot temperature data or hospital stats for conditions like pneumonia
-##### 4) optimise process, remove any redunancies/ ineffecent orderings (data loading will be a large chuck if not optimised)
-##### 5) annotate further and build narrative
+This give us a meaningful insight into the trends which affect antibiotic prescription. With these findings, healthcare providers could use weather forecasts to help predict parthenogenesis in the community, and prepare for seasonal demand efficiently. By scouring Antibiotics more efficiently, healthcare providers can save money by preventing over-ordering and disposing of unused expired medications. 
+
+This is not the only issues faced by seasonal perscriptions, as mentioned previously, over-perscription can promote antibiotic resistance. Future studies should also look at the bacterial:non-bacterial infection rate and compare it with the antibiotic doses per capita data. In regions where antibiotics are incorectly perscribed, we would be able to spot that baterial:non-bacterial infection rates are low with a disproportionatley high Antibiotic dosage per capita rate and could provide significant public benifits by helping curb antibiotic resistance development.
