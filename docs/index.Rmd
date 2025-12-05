@@ -1,7 +1,6 @@
 ---
 title: "B229723 - R Programming Assignment - ICA 1"
-output: 
-  rmdformats::material:
+output:rmdformats::material:
     toc_float: true
     code_folding: show
 ---
@@ -14,32 +13,27 @@ options(timeout = 600) # some data sets are on slower servers, so we have to giv
 # Introduction 
 ### Is there an association between antibiotic prescription rate and cold weather? How does this vary by health board?
 
-Antibiotics are among the most widely prescribed classes of medications, with 31.2% being prescribed annually in the Scotland [1]. Consequently, understanding the factors that influence prescription is paramount. This is especially important given the rise of antibiotic resistance. [2] 
+Antibiotics are among the most widely prescribed classes of medications, with 31.2% of the population being prescribed annually in the Scotland [1]. Consequently, understanding the factors that influence prescription is paramount to healthcare. One benefit of improving our understanding of prescription trends is the ability to combat antimicrobial resistance, which is consistently rising [2]. In this report, we are looking at the antibiotic dosage rate, over 2 June-December periods, and observing if there is any correlation between dosage rate in health boards, and the minimum average temperature.
 
-In this report, we are looking at the prescription rate of antibiotics over 2 summer-winter periods, and seeing if there is any correlation between prescription rate in health boards, and the minimum average temperature. With cold weather promoting respiratory conditions, one of the main uses of antibiotics, we could expect to see an uptick in prescriptions during colder weather.
-
-To investigate this, we will be using prescription data from NHS Scotland, population data from the UK government website (provided ultimately by the Scottish government), and temperature data from CEDA (originally provided by the MET office). We will start by using static graphs to show preliminary findings. Secondly, an interactive web app to show temporal/spatial relationships in a dynamic manner.
-
+To investigate this, we will be using prescription data from NHS Scotland, population data from Public Health Scotland, and temperature data from the MET office. We will start by using static graphs to show preliminary findings. Secondly, an interactive app to show temporal/spatial relationships in a dynamically.
 
 # Our Packages
 
 ```{R Package install, message=FALSE, warning=FALSE, result = FALSE}
 Packages = c(
-  "tidyverse", "janitor", "sf", "terra", "exactextractr", "shiny", "here", "reactable", "rmdformats", "ggiraph", "scales", "styler") # creates list of required packages
-#Note: sytler is not used in-script, it helps tidy scripts afterwards through the "add-in" menu.
+  "tidyverse", "janitor", "sf", "terra", "exactextractr", "shiny", "here", "reactable", "rmdformats", "ggiraph", "scales", "reactablefmtr") # creates list of required packages
 Missing = Packages[!Packages %in% installed.packages()[, "Package"]]
 if (length(Missing) > 0) install.packages(Missing) # checks to see if they are already installed, in not it will install missing packages
 
 invisible(lapply(Packages, library, character.only = TRUE)) #opens library of all packages
 ```
 
-
 # Reading in Our Data
 ## Temperature Data
-First, let's load our temperature data. We can't directly download our data from the CEDA website due to the login required (and the API, which bypasses this, is not yet functional)
+First, let's load our temperature data. We can't directly download our data from the CEDA website due to the login required to download (and the API, which bypasses this, is not yet functional).
 
-To access the data, you can create a CEDA account and download the data and but it in your temperature data folder: *[ HadUK-grid 1km grid, v1.3.1.ceda](https://catalogue.ceda.ac.uk/uuid/f02cc6ddd92f45b18b9ab6ab544df7d9/)*
-We'll be using data from the HadUK gridded data set, which provides a comprehensive overview of climate temperatures with high resolution. From this data set, we can build a highly accurate record of average minimum temperatures.
+To access the data, you can create a CEDA account and download the data and put it in your temperature data folder: *[ HadUK-grid 1km grid, v1.3.1.ceda](https://catalogue.ceda.ac.uk/uuid/f02cc6ddd92f45b18b9ab6ab544df7d9/)*
+We'll be using data from the HadUK gridded data set, which provides a comprehensive overview of temperatures trends with high resolution. From this data set, we can construct a highly precise record of average minimum temperatures.
 ```{r Reading Temp Data, message=FALSE}
 Years = c(2023, 2024) # we'll save this value, so we can rename our layers later easily using rep()
 
@@ -55,12 +49,11 @@ names(All_Temp_Data) = paste0(rep(Years, each = 12), "_", month.name)
 ## Antibiotics Data
 We can download our data directly from the Website at:  
 *[Public Health Scotland, Prescriptions in the Community](https://www.opendata.nhs.scot/dataset/prescriptions-in-the-community)* 
-We're going to use "paid_quantity" as our metric for antibiotics. Whilst it may seem intuitive to use number_of_paid_items, there is a weakness that both multi-orders and single orders can be represented as only 1 "number_of_paid_items. On the contrary, paid_quantity keeps a consistent count of medication volumes, so is more appropriate for our purposes
+We’ll use paid_quantity as our antibiotic metric. Unlike number_of_paid_items, which counts both single and multiple orders as 1. paid_quantity consistently reflects the actual medication volumes, making it more appropriate.
 ```{r Reading_in_Antibiotic_Data, message=FALSE}
 # First you'll need a folder called "Antibiotics_Data", the script below will check and create one if its not present.
 if(!dir.exists(here("Antibiotics_Data"))) {dir.create(here("Antibiotics_Data"))}
 # Download the data from the link above. we'll be working with June-December in 2023 and 2024, in a .CSV format, once downloaded, put them into your antibiotics folder.
-
 Antibiotics_Data = list.files(path = here("Antibiotics_Data"), pattern = "\\.csv$", full.names = TRUE)
 
 Antibiotics_Data_List = map(Antibiotics_Data, ~ read_csv(.x) %>%
@@ -75,11 +68,8 @@ Antibiotics_Data_Combo = bind_rows(Antibiotics_Data_List)
 
 
 ## Population Data
-In order to accurately compare between more populated and less populated regions, we're going to use the metric 'Antibiotic doses per 1000'. We'll need to divide our Antibiotic data by population.
-
-We'll be using data from Public Health Scotland again to provide population statistics. If you'd like to manually download the data, it can be found here:  
+In order to accurately compare between more populated and less populated regions, we're going to use the metric 'Antibiotic doses per 1000'. We'll need to divide our Antibiotic data by population. We'll be using data from Public Health Scotland again to provide population statistics. If you'd like to manually download the data, it can be found here:  
 *[Public Health Scotland, Health Board (2019) Population Estimates](https://www.opendata.nhs.scot/dataset/population-estimates/resource/27a72cc8-d6d8-430c-8b4f-3109a9ceadb1)*  
-(Note, the website states population data is from 1981-2023, but actually stretches to 2024 too)
 
 ```{r Reading_in_Pop_Data, message=FALSE}
 Pop = read_csv("https://www.opendata.nhs.scot/dataset/7f010430-6ce1-4813-b25c-f7f335bdc4dc/resource/27a72cc8-d6d8-430c-8b4f-3109a9ceadb1/download/hb2019_pop_est_03102025.csv") %>%
@@ -87,16 +77,16 @@ Pop = read_csv("https://www.opendata.nhs.scot/dataset/7f010430-6ce1-4813-b25c-f7
    filter(year %in% c("2023", "2024") &
      sex == "All" &
      hb != "S92000003") %>%
-   dplyr::select(hb, all_ages, year) #base R also has a select(). R can get confused to which select() you want to use, so adding dplyr:: before select() helps R pick the correct one
+    select(hb, all_ages, year) # R can get confused to which select() you want to use, so adding dplyr:: before select() helps R pick the correct one
 ```
 
 ## Map data
 
-We can download our map data from the Scottish Goverment website at:     *[spatialdata.gov.scot](https://www.spatialdata.gov.scot/geonetwork/srv/eng/catalog.search#/metadata/f12c3826-4b4b-40e6-bf4f-77b9ed01dc14)*
+We can download our map data directly from the Scottish Government website:     *[spatialdata.gov.scot](https://www.spatialdata.gov.scot/geonetwork/srv/eng/catalog.search#/metadata/f12c3826-4b4b-40e6-bf4f-77b9ed01dc14)*
 ```{r Reading_Map_Data, message=FALSE}
  Scotland_Map = st_read("/vsizip/vsicurl/https://maps.gov.scot/ATOM/shapefiles/SG_NHS_HealthBoards_2019.zip/SG_NHS_HealthBoards_2019.shp", quiet = TRUE) %>% # /vsizip/vsicurl allows our data to open a zip file, and download it over the internet
    st_simplify(dTolerance = 1000) %>% # st_simplify makes our map data less data-intensive, and helps it run quicker
-   st_transform(crs(All_Temp_Data)) # st_transform makes sure that our map data will work with our temp data, this is because out temp data are data is organised differently (polygons or grids), this makes sure we can convert between the two easily.
+   st_transform(crs(All_Temp_Data)) # st_transform makes sure that our map data will work with our other data
 ```
 
 
@@ -108,7 +98,7 @@ Temp_df = exact_extract(All_Temp_Data, Scotland_Map, "mean",
   full_colnames = FALSE,
   append_cols = "HBName") %>%
   select(-matches("(January|February|March|April|May)"))
-# exact_extract adds "mean." to our column names. You can't prevent this, so we'll have to remove it so we can reliably process our data downstream.
+# exact_extract adds "mean." to our column names. You can't prevent this. We have to remove it, so we can reliably process our data downstream.
 names(Temp_df) = gsub("mean.", "", names(Temp_df))
 
 Temp_df_Long = Temp_df %>%
@@ -116,7 +106,7 @@ Temp_df_Long = Temp_df %>%
     cols = -c(HBName), # we select the columns we want to turn into rows (all except HBName which we dont want to change)
     names_to = "Year_Month", # new column name for month
     values_to = "Min_Temperature") %>% # new column name for values
-  separate("Year_Month", into = c("Year", "Month")) %>% # turning our single year_month column into seperate year and month columns
+  separate("Year_Month", into = c("Year", "Month")) %>%
   mutate(Year = as.numeric(Year)) # we encode our year as a numeric, to ensure it can join other data later.
 ```
 
@@ -152,7 +142,7 @@ Antibiotics_Dose_PC = Sum_Antibiotics_Data %>%
 ```
 
 # Tables of our data
-```{r antibiotics_table, message=FALSE, fig.cap="*Table of dosage per 1000 and average minimum temperatures by year, month, and health board*"}
+```{r antibiotics_table, message=FALSE}
  dropdown_filter = function(values, name) { # drop down provides filtering options for our data, once we put it into a table
    tags$select(
      onchange = sprintf(
@@ -161,11 +151,11 @@ Antibiotics_Dose_PC = Sum_Antibiotics_Data %>%
      lapply(sort(unique(values)), tags$option),
      style = "width: 100%; height: 30px;")}
 
-reactable( # we'll use teactable to make an interactive table
+reactable( # we'll use reactable() to make an interactive table
   Antibiotics_Temp_Table,
   filterable = TRUE,
   pagination = FALSE, # This lets us have a scroll bar rather than pages
-  height = 400,
+  height = "400px",
   defaultColDef = colDef(filterInput = dropdown_filter),
     columns = list(
     Dose_per_1000 = colDef(
@@ -176,14 +166,16 @@ reactable( # we'll use teactable to make an interactive table
        name = " Average Minimum Temperature (ºC)"),
    HBName = colDef(
      name = "Health Board"),
-     elementId = "antibiotics-table"))
-
+     elementId = "antibiotics-table")) %>% 
+  add_subtitle("Table 1: Antibiotic dosage rate vs average minimum temperature (ºC) in 2023 and 2024, by date and healthboard",
+               align = "center")
 ```
-We can see that August is consistently the warmest month, accounting for 8/10 of the highest minimum temperatures. 2023 also saw higher minimum temperatures, accounting for 8/10 of the highest minimum temperatures. The coldest 5 times where 7/10 of the 10 coldest months occurred in their Grampians, Tayside, or the Highlands. We see that Orkney has the lowest 4-month dosage rates. The western central belt saw the highest prescriptions rates, with Lanarkshire and Ayrshire and Arran consistently saw high dosage rates, making up 6/10 of the highest dosage rates across both years.
 
+We can see that August is consistently the least cold month, accounting for 8/10 of the highest minimum temperatures. 2023 also saw higher minimum temperatures, accounting for 8/10 of the highest minimum temperatures. 7/10 of the 10 coldest months occurred in their Grampians, Tayside, or the Highlands. We see that Orkney has the 4 lowest monthly dosage rates. The western central belt saw the highest dosage rates, with Lanarkshire and Ayrshire and Arran consistently seeing high dosage rates, making up 6/10 of the highest dosage rates across both years.
 
 # Preliminary Graphs, and Looking for Associations
-```{r Preliminary_Graphs, message=FALSE, fig.width = 10, fig.height = 5, fig.cap = "*Scatter plot of antibiotic use vs average minimum temperature (ºC) in 2023 and 2024. Red = regression line; Shaded = Standard error*"}
+
+```{r Preliminary_Graphs, message=FALSE, fig.width=10, fig.height=6, out.width="800px", fig.cap = "Fig. 1 Scatter plot of antibiotic use vs average minimum temperature (ºC) in 2023 and 2024. Red = regression line; Shaded = Standard error"}
 ggplot(Antibiotics_Temp_Table, aes(x = Min_Temperature, y = Dose_per_1000)) +
   geom_point(size = 1,
              color = "blue") +
@@ -194,10 +186,10 @@ ggplot(Antibiotics_Temp_Table, aes(x = Min_Temperature, y = Dose_per_1000)) +
        title = "Scatter plot of Antibiotic Doses per 1000 vs Average Minimum Temperature") +
   theme_minimal() # formatting to it fits our page nicely
 ```
-From this graph, we can see there is a correlation between average minimum temperature and the number of Antibiotic doses per 1000, as can be seen by our trend lines declining nature. However, we can't tell if different health boards are affected differently, and without the red trend line, it would be hard to see broader trends. If we plot this on a map, we would be able to see spatial relationships, and be able to see temporal trends in greater resolution. By using chlorogrpahs, we will be able to see how regions compare, and weather there are areas with disproportionate prescription rates, when considering average minimum temperatures.
+From Fig 1, we can see a correlation between average minimum temperature and the antibiotic dosage rate, as indicated by the downward trend of the regression lines. However, we cannot determine how different health boards are affected individually, and without the trend line, broader patterns would be harder to detect. Plotting this data as a choropleth would reveal spatial relationships and allow us to observe temporal trends among and between health boards.
 
-# Interactive Maps
-We'll use Shiny, and shiny.IO to make and host an app which will let us browse the full range of maps and identify any spatial-temporal trends in the data.
+# Interactive choropleths
+We'll use Shiny, and shiny.IO to make and host an app which will let us browse the full range of choropleths and identify any spatial-temporal trends in the data.
 You can find the introduction to Shiny, and Shiny.IO below:   
 *[Shiny](https://shiny.posit.co/r/getstarted/shiny-basics/lesson1/)*  
 *[Shiny.IO](https://docs.posit.co/shinyapps.io/guide/index.html)*
@@ -206,33 +198,35 @@ src="https://rbarkham.shinyapps.io/antibiotics_map/"
 data-external="1"
 style="border: none"
 width="100%" 
-height="550px"
+height="560px"
 scrolling="no"
 seamless = TRUE>
 </iframe>
 
-From the plots, we can see an inverse relationship between antibiotic prescription and minimum temperature - as it gets warmer, less antibiotics are prescribed, we see that Tayside is consistently the coldest region (although not consistently the most prescribed). This cooperates with the correlation we observed in our first graph. However, Whilst we have observed a correlation, we do not have sufficient evidence to state there is a directly causal relationship. One important aspect to consider is the reported over caution by doctors in the winter months [3]. This could artificially inflate antibiotic numbers, especially in areas with higher illness and elderly burdens. We have evidence that corroborates with this idea, with 8 out of the 10 highest dosage rates being reported to have the highest elderly population[4].
+From the choropleths, we can see an inverse relationship between antibiotic prescription and minimum temperature - as it gets less cold, less antibiotics are prescribed. This cooperates with the correlation we observed in Fig. 1. We see that Tayside is consistently the coldest region (although not consistently the most prescribed). The western central belt appears to regularly see the highest antibiotic dosage rates, despite being one of the least cold regions.
+
+Whilst we have observed a correlation. One important aspect to consider is the reported over prescription by doctors in the winter months [3]. This could artificially inflate antibiotic numbers, especially in areas with higher elderly populations. our data corroborates with this idea, with 8 out of the 10 highest dosage rates being from health boards with larger elderly demographics[4].
 
 ```{r}
 if(!dir.exists(here("App_Data"))) {dir.create(here("App_Data"))}
+if(!file.exists(here("App_Data/app.R"))) {dir.create(here("App_Data/app.R"))}
 saveRDS(Antibiotics_Temp_Map, here("App_Data/Antibiotics_Temp_Map.rds"))
 ```
 
 ```{r eval=FALSE}
- # whilst it may seem intuitive to just download tidyverse, it is best to load individual packages separately. If we load tidyverse, we will download many packages which we don't need. When we're hosting on Shiny.IO servers, we have a limited amount of memory available to us, so the less packages the better.
-library(shiny)
+#Although downloading the full tidyverse is convenient, loading only the needed packages is better. Shiny.IO has limited memory.
+library(shiny) #this chunk should be loaded into your new app.R file
 library(scales)
 library(sf)
 library(dplyr)
 library(ggplot2)
 library(ggiraph)
 # If deploying/uploading, library(rsconnect) / install.packages(rsconnect)
-#-------------------------------------------------------------------------------
 Antibiotics_Temp_Map = readRDS(here("App_Data/Antibiotics_Temp_Map.rds"))
 #remove here(App_Data/) when uploading to Shiny.IO
 UI = fluidPage( # fluid page tells R that this is an interactive element
   style = "padding: 0; margin: 0;",
-  titlePanel("Antibiotic Doses per 1000 / Average Minimum Temperature (ºC), by Health board"),
+  titlePanel("Fig 2: Antibiotic Doses per 1000 / Average Minimum Temperature (ºC), by Health board"),
   sidebarLayout( #the sidebar will be our filter drop down area
     sidebarPanel( width = 3, style = "padding: 0; margin: 0;",
       selectInput("Year", "Select Year",  # 1st drop down box,for year
@@ -244,15 +238,15 @@ UI = fluidPage( # fluid page tells R that this is an interactive element
         cellWidths = c("50%", "50%"), # splits the row 50/50
         cellArgs = list(style = "padding: 0;"), #removes padding
         girafeOutput("Min_Temp_Map", height = "100%", width = "100%"),
-        girafeOutput("Antibiotic_Map", height = "100%", width = "100%")
-      )))) # tells R which plots we want to display (we define what they are in the server section)
+        girafeOutput("Antibiotic_Map", height = "100%", width = "100%") )))) 
+# tells R which plots we want to display (we define what they are in the server section)
 
 Server = function(input, output, session) {
   
 Filter = reactive({ # reactive tells R that it needs to update everytime a new selection is made
     Antibiotics_Temp_Map %>%
       filter(Year == input$Year, #tells R that it has to filter based on the input of the drop downs.
-             Month == input$Month)})
+             Month == input$Month) })
   
 output$Antibiotic_Map = renderGirafe({
     Antibiotics_Data = Filter() #Filtered() acts as a placeholder for our filtered data
@@ -276,13 +270,11 @@ output$Antibiotic_Map = renderGirafe({
         barwidth = 10,   # width of the legend bar
         barheight = 1)) +
   theme_minimal() +
-  theme(legend.position = "bottom", # move legend to the bottom to prevent ambiguity 
-            plot.margin = margin(50, 0, 0, 0)) 
+  theme(legend.position = "bottom") # move legend to the bottom to prevent ambiguity 
     
   girafe(ggobj = ggplot_Antibiotics,
            width_svg = 5,   # width
-           height_svg = 7)
-  })
+           height_svg = 7) })
 
 output$Min_Temp_Map = renderGirafe({
     Min_Temp = Filter()
@@ -307,17 +299,14 @@ output$Min_Temp_Map = renderGirafe({
       barwidth = 10,
       barheight = 1)) +
   theme_minimal() +
-  theme(legend.position = "bottom",
-            plot.margin = margin(50, 0, 0, 0))
+  theme(legend.position = "bottom")
   girafe(ggobj = ggplot_Temp,
          width_svg = 5,   #width
-         height_svg = 7) 
-})}
+         height_svg = 7) })}
 shinyApp(UI, Server) # tells R to run the app
 
-#when you want to upload your app to Shiny IO, you need to use rsconnect, to link you account and computer, when you create your account you'll be given a token to enter into R. You do not need to add it to your app as you will only use it to upload the app. You can see the intro linked above for details.
-
-# Copy and paste this, outside of the chunk on its own (not in a chunk)
+#To upload your app to Shiny.IO, use rsconnect with the token provided when creating your account. You don’t need to include it in the app itself.
+# Copy and paste this, outside of the chunk on its own:
 # <iframe 
 # src="[link given when deploying app" 
 # data-external="1"
@@ -330,9 +319,9 @@ shinyApp(UI, Server) # tells R to run the app
 ```
 
 # Next steps
-This gives us a meaningful insight into the trends that affect antibiotic prescription. With these findings, healthcare providers could use weather forecasts to help predict pathogenesis in the community and prepare for seasonal demand efficiently. By sourcing antibiotics more efficiently, healthcare providers can save money by preventing over-ordering and disposing of unused expired medications. 
+This gives us a meaningful insight into the trends that could affect antibiotic prescription. With these findings, healthcare providers could use weather forecasts to help predict pathogenesis in the community and prepare for seasonal demand efficiently. By sourcing antibiotics more efficiently, healthcare providers can save money by preventing over-ordering and disposing of unused expired medications.
 
-This is not the only issue faced by seasonal prescriptions, as mentioned previously, over-prescription can promote antibiotic resistance. Future studies should also look at the bacterial:non-bacterial infection rate and compare it with the antibiotic doses per 1000 data. In regions where antibiotics are incorrectly prescribed, we would be able to spot that bacterial:non-bacterial infection rates are low with a disproportionately high antibiotic dosage per 1000 rate and could provide significant public benefits by helping curb antibiotic resistance development.
+This is not the only issue faced by seasonal prescriptions, as mentioned previously, over-prescription can promote antibiotic resistance. Future studies should also look at the bacterial:non-bacterial infection rate and compare it with the antibiotic dosage rate. In regions where antibiotics are incorrectly prescribed, we would be able to spot that bacterial:non-bacterial infection rates are low with a disproportionately high antibiotic dosage rate and could provide significant public benefits by helping curb antibiotic resistance development.
 
 # References
 [1] "Scottish One Health Antimicrobial Use and Antimicrobial Resistance in 2023" - Antimicrobial Resistance and Healthcare Associated Infection Scotland, 19 November 2024, *[Link](https://www.nss.nhs.scot/publications/scottish-one-health-antimicrobial-use-and-antimicrobial-resistance-in-2023/)*  
