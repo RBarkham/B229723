@@ -1,6 +1,7 @@
 ---
 title: "B229723 - R Programming Assignment - ICA 1"
-output:rmdformats::material:
+output:
+  rmdformats::material:
     toc_float: true
     code_folding: show
 ---
@@ -93,7 +94,7 @@ We can download our map data directly from the Scottish Government website:     
 
 # Data Wrangling and Joining
 ## Temperature Data
-```{r .nc --> DF conversion, message=FALSE, results='hide'}
+```{r DF conversion, message=FALSE, results='hide'}
 Temp_df = exact_extract(All_Temp_Data, Scotland_Map, "mean",
   full_colnames = FALSE,
   append_cols = "HBName") %>%
