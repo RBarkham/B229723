@@ -45,6 +45,10 @@ rsconnect/
 # translation temp files
 po/*~
 
+#folders
+App_Data/
+Antibiotics_Data/
+Temperature_data/
 
 #DS Store
 .DS_Store
